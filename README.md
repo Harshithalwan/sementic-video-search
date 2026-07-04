@@ -99,6 +99,82 @@ python main.py --mode query --query "empty room" --top-k 10
 | `--query TEXT` | *(required)* | The semantic search query (e.g. `"a person walking"`). |
 | `--top-k N` | `5` | Number of search results to return. |
 
+### Query Filters (all optional)
+
+Filter results by metadata fields. Multiple filters are combined with AND logic.
+
+| Flag | Type | Description |
+|------|------|-------------|
+| `--filter-video-id TEXT` | `str` | Exact match on video ID (UUID assigned per stream session). |
+| `--filter-video-name TEXT` | `str` | Exact match on video file name. |
+| `--filter-ts-from MS` | `float` | Video timestamp lower bound (milliseconds). |
+| `--filter-ts-to MS` | `float` | Video timestamp upper bound (milliseconds). |
+| `--filter-time-from SECS` | `float` | Wall-clock time lower bound (seconds since midnight). |
+| `--filter-time-to SECS` | `float` | Wall-clock time upper bound (seconds since midnight). |
+
+Examples:
+
+```bash
+# Captions from a specific video session
+python main.py --mode query --query "person walking" --filter-video-id <uuid>
+
+# Captions for a specific video file
+python main.py --mode query --query "car" --filter-video-name video.mp4
+
+# Captions within the first 30 seconds of the video (0–30000 ms)
+python main.py --mode query --query "hello" --filter-ts-from 0 --filter-ts-to 30000
+
+# Captions generated between 10:00 and 10:30 (36000–37800 seconds since midnight)
+python main.py --mode query --query "meeting" --filter-time-from 36000 --filter-time-to 37800
+
+# Combining multiple filters
+python main.py --mode query --query "dog" --filter-video-name video.mp4 --filter-ts-from 5000 --filter-ts-to 60000
+```
+
+## Resetting the Database
+
+The `reset_db.py` script lets you delete collections or wipe the entire vector database.
+
+Delete a single collection (defaults to `"captions"`):
+
+```bash
+python reset_db.py
+```
+
+Delete a specific collection:
+
+```bash
+python reset_db.py --collection-name my_collection
+```
+
+Wipe all collections and the database directory:
+
+```bash
+python reset_db.py --full
+```
+
+Skip the confirmation prompt:
+
+```bash
+python reset_db.py -y
+```
+
+Use a custom database path or a remote Qdrant server:
+
+```bash
+python reset_db.py --vector-db-path ./my_db_dir --qdrant-url http://localhost:6333
+```
+
+### Reset Options
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--vector-db-path PATH` | `./video_captions_db` | Local directory for the Qdrant database. |
+| `--qdrant-url URL` | *(none)* | URL of a running Qdrant server. |
+| `--collection-name NAME` | `captions` | Collection to delete (ignored with `--full`). |
+| `--full` | off | Delete ALL collections and remove the database directory. |
+| `-y, --yes` | off | Skip the confirmation prompt. |
+
 ## Project Structure
 
 ```

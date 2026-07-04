@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from qdrant_client import QdrantClient
+from qdrant_client.models import Filter
 
 
 class VectorStore:
@@ -69,12 +70,19 @@ class VectorStore:
     # Query
     # ------------------------------------------------------------------
 
-    def query(self, query_text: str, top_k: int = 5) -> list:
+    def query(
+        self,
+        query_text: str,
+        top_k: int = 5,
+        query_filter: Optional[Filter] = None,
+    ) -> list:
         """Semantic search over stored captions.
 
         Args:
             query_text: Free-text search query.
             top_k: Number of results to return.
+            query_filter: Optional Qdrant Filter for metadata filtering
+                (e.g. by video_id, video_name, timestamp range).
 
         Returns:
             A list of Qdrant query result objects.
@@ -82,12 +90,29 @@ class VectorStore:
         return self._client.query(
             collection_name=self.collection_name,
             query_text=query_text,
+            query_filter=query_filter,
             limit=top_k,
         )
 
     # ------------------------------------------------------------------
     # Utilities
     # ------------------------------------------------------------------
+
+    def delete_collection(self) -> bool:
+        """Delete the configured collection from the database.
+
+        Returns:
+            True if the collection existed and was deleted, False otherwise.
+        """
+        if not self.collection_exists():
+            return False
+        self._client.delete_collection(collection_name=self.collection_name)
+        return True
+
+    def reset_database(self) -> None:
+        """Delete ALL collections in the database."""
+        for name in self.list_collections():
+            self._client.delete_collection(collection_name=name)
 
     def list_collections(self) -> list[str]:
         """Return the names of all collections in the database."""
