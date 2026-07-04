@@ -1,0 +1,73 @@
+"""MiniCPM-V captioner implementation."""
+
+from __future__ import annotations
+
+import cv2
+import torch
+from PIL import Image
+from transformers import AutoProcessor, AutoModelForImageTextToText
+
+from .base import BaseVideoCaptioner, select_torch_dtype
+
+
+class MiniCPMVVideoCaptioner(BaseVideoCaptioner):
+    """Vision-Language captioner backed by OpenBMB MiniCPM-V."""
+
+    def __init__(self, model_id: str) -> None:
+        dtype = select_torch_dtype()
+        self.model = AutoModelForImageTextToText.from_pretrained(
+            model_id,
+            trust_remote_code=True,
+            device_map="auto" if torch.cuda.is_available() else None,
+            torch_dtype=dtype,
+        )
+        self.processor = AutoProcessor.from_pretrained(model_id, trust_remote_code=True)
+
+    def caption_frame(self, frame_bgr, previous_caption: str) -> str:
+        frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
+        image = Image.fromarray(frame_rgb)
+
+        prompt = (
+            "You are captioning a live video stream.\n"
+            f"Previous caption: {previous_caption or 'none'}.\n"
+        )
+
+        conversation = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image", "image": image},
+                    {"type": "text", "text": prompt},
+                ],
+            },
+        ]
+
+        inputs = self.processor.apply_chat_template(
+            conversation,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+            downsample_mode="16x",
+        )
+        inputs = {
+            k: v.to(self.model.device) if isinstance(v, torch.Tensor) else v
+            for k, v in inputs.items()
+        }
+
+        with torch.inference_mode():
+            output_ids = self.model.generate(
+                **inputs,
+                max_new_tokens=48,
+                temperature=0.1,
+                top_k=50,
+                top_p=0.1,
+                repetition_penalty=1.05,
+            )
+
+        input_len = inputs["input_ids"].shape[1]
+        generated_tokens = output_ids[:, input_len:]
+        caption = self.processor.batch_decode(
+            generated_tokens, skip_special_tokens=True
+        )[0].strip()
+        return caption
