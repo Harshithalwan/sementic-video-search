@@ -89,7 +89,7 @@ python main.py --mode query --query "empty room" --top-k 10
 |------|---------|-------------|
 | `--vector-db-path PATH` | `./video_captions_db` | Local directory for the Qdrant database. |
 | `--qdrant-url URL` | *(none)* | URL of a running Qdrant server (e.g. `http://localhost:6333`). Overrides local storage. |
-| `--collection-name NAME` | `captions` | Qdrant collection name for storing/searching captions. |
+| `--collection-name NAME` | *(model-specific)* | Qdrant collection name. Defaults to `captions_lfm2.5` or `captions_minicpm_v` based on `--model-type`. |
 | `--disable-vector-db` | off | Skip saving captions to the database (stream mode only). |
 
 ### Query Options
@@ -133,9 +133,9 @@ python main.py --mode query --query "dog" --filter-video-name video.mp4 --filter
 
 ## Resetting the Database
 
-The `reset_db.py` script lets you delete collections or wipe the entire vector database.
+The `reset_db.py` script lets you list collections, delete a specific one, or wipe the entire database.
 
-Delete a single collection (defaults to `"captions"`):
+List all available collections:
 
 ```bash
 python reset_db.py
@@ -144,7 +144,7 @@ python reset_db.py
 Delete a specific collection:
 
 ```bash
-python reset_db.py --collection-name my_collection
+python reset_db.py --collection-name captions_lfm2.5
 ```
 
 Wipe all collections and the database directory:
@@ -156,7 +156,7 @@ python reset_db.py --full
 Skip the confirmation prompt:
 
 ```bash
-python reset_db.py -y
+python reset_db.py -y --collection-name captions_minicpm_v
 ```
 
 Use a custom database path or a remote Qdrant server:
@@ -171,7 +171,7 @@ python reset_db.py --vector-db-path ./my_db_dir --qdrant-url http://localhost:63
 |------|---------|-------------|
 | `--vector-db-path PATH` | `./video_captions_db` | Local directory for the Qdrant database. |
 | `--qdrant-url URL` | *(none)* | URL of a running Qdrant server. |
-| `--collection-name NAME` | `captions` | Collection to delete (ignored with `--full`). |
+| `--collection-name NAME` | *(list mode)* | Collection to delete. If omitted, lists available collections. |
 | `--full` | off | Delete ALL collections and remove the database directory. |
 | `-y, --yes` | off | Skip the confirmation prompt. |
 

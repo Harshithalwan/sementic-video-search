@@ -28,8 +28,9 @@ class MiniCPMVVideoCaptioner(BaseVideoCaptioner):
         image = Image.fromarray(frame_rgb)
 
         prompt = (
-            "You are captioning a live video stream.\n"
+            "You are captioning a documentry video. If there are any different human or animal in the frame, identify them and describe their actions. For human mention what they are wearing and what color is it. Also describe the prominent background features to give a hint of the environment.\n"
             f"Previous caption: {previous_caption or 'none'}.\n"
+            "Be concise. Do not repeat the previous caption."
         )
 
         conversation = [

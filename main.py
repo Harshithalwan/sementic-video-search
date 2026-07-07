@@ -14,7 +14,7 @@ import cv2
 
 from qdrant_client.models import FieldCondition, Filter, MatchValue, Range
 
-from models import create_captioner, DEFAULT_MODEL_IDS, MODEL_REGISTRY
+from models import create_captioner, DEFAULT_MODEL_IDS, MODEL_REGISTRY, COLLECTION_NAMES
 from database import VectorStore
 
 
@@ -34,6 +34,9 @@ class StreamConfig:
     qdrant_url: Optional[str]
     collection_name: str
     disable_vector_db: bool
+    # video-native model options
+    fps: int = 20
+    clip_duration: float = 3.0
     # query-mode fields
     query: Optional[str] = None
     top_k: int = 5
@@ -81,13 +84,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--caption-interval",
         type=float,
-        default=2.0,
+        default=1.0,
         help="Seconds to wait between model calls so the stream does not overload the model.",
     )
     parser.add_argument(
         "--max-new-tokens",
         type=int,
-        default=48,
+        default=500,
         help="Maximum tokens generated per caption.",
     )
     parser.add_argument(
@@ -100,6 +103,20 @@ def parse_args() -> argparse.Namespace:
         "--show-preview",
         action="store_true",
         help="Show a live preview window while captions are generated.",
+    )
+
+    # Video-native model options -----------------------------------
+    parser.add_argument(
+        "--fps",
+        type=int,
+        default=20,
+        help="Target sampling FPS for video-native models (e.g. llava-video).",
+    )
+    parser.add_argument(
+        "--clip-duration",
+        type=float,
+        default=3.0,
+        help="Seconds of video per clip for video-native models.",
     )
 
     # Database options (shared) -------------------------------------
@@ -115,8 +132,8 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--collection-name",
-        default="captions",
-        help="Name of the Qdrant collection to store/search captions.",
+        default=None,
+        help="Qdrant collection name. Defaults to a model-specific name (e.g. captions_lfm2.5).",
     )
     parser.add_argument(
         "--disable-vector-db",
@@ -191,6 +208,9 @@ def resolve_source(source: str):
 
 def build_config(args: argparse.Namespace) -> StreamConfig:
     model_id = args.model_id or DEFAULT_MODEL_IDS.get(args.model_type, args.model_type)
+    collection_name = args.collection_name or COLLECTION_NAMES.get(
+        args.model_type, f"captions_{args.model_type}"
+    )
 
     return StreamConfig(
         mode=args.mode,
@@ -203,8 +223,10 @@ def build_config(args: argparse.Namespace) -> StreamConfig:
         show_preview=args.show_preview,
         vector_db_path=args.vector_db_path,
         qdrant_url=args.qdrant_url,
-        collection_name=args.collection_name,
+        collection_name=collection_name,
         disable_vector_db=args.disable_vector_db,
+        fps=args.fps,
+        clip_duration=args.clip_duration,
         query=args.query,
         top_k=args.top_k,
         filter_video_id=args.filter_video_id,
@@ -237,7 +259,12 @@ def run_stream(config: StreamConfig) -> None:
     video_id = str(uuid.uuid4())
     video_name = _derive_video_name(config.source)
 
-    captioner = create_captioner(config.model_type, config.model_id)
+    captioner = create_captioner(
+        config.model_type,
+        config.model_id,
+        fps=config.fps,
+        clip_duration=config.clip_duration,
+    )
     previous_caption = ""
     caption_count = 0
     next_caption_at = 0.0
@@ -274,9 +301,13 @@ def run_stream(config: StreamConfig) -> None:
                     break
 
             now = time.monotonic()
-            if now < next_caption_at:
-                time.sleep(min(0.02, next_caption_at - now))
-                continue
+
+            # Frame-by-frame models: skip frames based on caption_interval.
+            # Video-native models: pass every frame to the captioner for buffering.
+            if not captioner.needs_all_frames:
+                if now < next_caption_at:
+                    time.sleep(min(0.02, next_caption_at - now))
+                    continue
 
             caption = captioner.caption_frame(frame, previous_caption)
             caption = caption.replace("\n", " ").strip()
@@ -296,6 +327,7 @@ def run_stream(config: StreamConfig) -> None:
                             metadata={
                                 "video_id": video_id,
                                 "video_name": video_name,
+                                "model_type": config.model_type,
                                 "current_time": current_time_str,
                                 "current_time_secs": current_time_secs,
                                 "video_timestamp": video_timestamp_str,
@@ -313,7 +345,8 @@ def run_stream(config: StreamConfig) -> None:
                 if config.max_frames is not None and caption_count >= config.max_frames:
                     break
 
-            next_caption_at = time.monotonic() + config.caption_interval
+            if not captioner.needs_all_frames:
+                next_caption_at = time.monotonic() + config.caption_interval
     except KeyboardInterrupt:
         pass
     finally:
@@ -411,11 +444,12 @@ def run_query(config: StreamConfig) -> None:
         print("No matching captions found.")
         return
 
-    print("\n" + "=" * 140)
-    print(f"{'Score':<8} | {'Video ID':<36} | {'Video Name':<20} | {'Vid TS':<14} | {'Time':<10} | {'Frame':<7} | {'Caption'}")
-    print("-" * 140)
+    print("\n" + "=" * 160)
+    print(f"{'Score':<8} | {'Model':<12} | {'Video ID':<36} | {'Video Name':<20} | {'Vid TS':<14} | {'Time':<10} | {'Frame':<7} | {'Caption'}")
+    print("-" * 160)
     for r in results:
         payload = r.metadata or {}
+        model_type = payload.get("model_type", "N/A")
         video_id = payload.get("video_id", "N/A")
         video_name = payload.get("video_name", "N/A")
         video_ts = payload.get("video_timestamp", "N/A")
@@ -423,8 +457,8 @@ def run_query(config: StreamConfig) -> None:
         frame_idx = payload.get("frame_index", "N/A")
         caption = r.document or "No text"
         score = f"{r.score:.4f}"
-        print(f"{score:<8} | {video_id:<36} | {video_name:<20} | {video_ts:<14} | {current_time:<10} | {frame_idx:<7} | {caption}")
-    print("=" * 140 + "\n")
+        print(f"{score:<8} | {model_type:<12} | {video_id:<36} | {video_name:<20} | {video_ts:<14} | {current_time:<10} | {frame_idx:<7} | {caption}")
+    print("=" * 160 + "\n")
 
 
 # ── Entry point ──────────────────────────────────────────────────────
