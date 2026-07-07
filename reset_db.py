@@ -3,13 +3,17 @@
 
 Usage
 -----
-Delete a single collection (default: "captions"):
+List available collections:
 
     python reset_db.py
 
 Delete a specific collection:
 
-    python reset_db.py --collection-name my_collection
+    python reset_db.py --collection-name captions_lfm2.5
+
+Delete a specific collection and skip confirmation:
+
+    python reset_db.py -y --collection-name captions_lfm2.5
 
 Wipe the entire database (all collections + data directory):
 
@@ -26,6 +30,7 @@ import argparse
 import sys
 
 from database import VectorStore
+from models import COLLECTION_NAMES
 
 
 def main() -> None:
@@ -44,8 +49,12 @@ def main() -> None:
     )
     parser.add_argument(
         "--collection-name",
-        default="captions",
-        help="Name of the collection to delete (ignored when --full is set).",
+        default=None,
+        help=(
+            "Name of the collection to delete. "
+            "If omitted and --full is not set, lists available collections. "
+            f"Known collections: {', '.join(COLLECTION_NAMES.values())}."
+        ),
     )
     parser.add_argument(
         "--full",
@@ -61,7 +70,7 @@ def main() -> None:
 
     try:
         store = VectorStore(
-            collection_name=args.collection_name,
+            collection_name=args.collection_name or "",
             db_path=args.vector_db_path,
             qdrant_url=args.qdrant_url,
         )
@@ -69,10 +78,29 @@ def main() -> None:
         print(f"Error initializing vector store: {e}")
         sys.exit(1)
 
+    available = store.list_collections()
+
     if args.full:
-        action = "DELETE ALL collections and wipe the database directory"
-    else:
+        if not available:
+            print("No collections found — nothing to reset.")
+            return
+        action = "DELETE ALL collections: " + ", ".join(available)
+    elif args.collection_name:
         action = f"DELETE collection '{args.collection_name}'"
+    else:
+        # No collection specified, no --full — just list and exit.
+        if not available:
+            print("No collections found in the database.")
+        else:
+            print("Available collections:")
+            for name in available:
+                note = ""
+                for model_type, coll in COLLECTION_NAMES.items():
+                    if coll == name:
+                        note = f"  ({model_type})"
+                        break
+                print(f"  {name}{note}")
+        return
 
     if not args.yes:
         answer = input(f"This will {action}. Continue? [y/N] ").strip().lower()
@@ -84,6 +112,7 @@ def main() -> None:
         store.reset_database()
         print("Database has been fully reset.")
     else:
+        store.collection_name = args.collection_name
         deleted = store.delete_collection()
         if not deleted:
             print(f"Collection '{args.collection_name}' does not exist — nothing to delete.")

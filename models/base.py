@@ -32,6 +32,16 @@ def select_torch_dtype() -> torch.dtype:
 class BaseVideoCaptioner(abc.ABC):
     """Abstract base class that every VLM captioner must implement."""
 
+    @property
+    def needs_all_frames(self) -> bool:
+        """Whether the captioner requires every video frame (not just sampled ones).
+
+        Frame-by-frame models return ``False`` — the orchestrator skips frames
+        based on ``caption_interval``.  Video-native models that buffer clips
+        internally return ``True`` so they receive every frame from the source.
+        """
+        return False
+
     @abc.abstractmethod
     def caption_frame(self, frame_bgr, previous_caption: str) -> str:
         """Generate a caption for a single video frame.
