@@ -86,12 +86,12 @@ class LLaVAVideoCaptioner(BaseVideoCaptioner):
         ])
 
         prompt = (
-            "You are captioning a documentary video. "
-            "Describe the scene, any humans or animals present, their actions and attire, "
+            "You are captioning a CCTV video. Camera is installed on the top, looking down. There's house door on the left side, which isn't visible due to camera angle. There are cars parked on the other end of the road."
+            "Describe if there's any change in the scene, any humans or animals present, their actions and attire, what they are carrying or holding, etc."
             "and prominent background features.\n"
             f"Previous caption: {previous_caption or 'none'}.\n"
             f"This clip contains {frame_count} frames sampled at {self.fps} fps.\n"
-            "Be concise. Do not repeat the previous caption."
+            # "Be concise. Do not repeat the previous caption."
         )
 
         conversation = [
