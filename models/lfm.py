@@ -59,7 +59,7 @@ class LFM25VideoCaptioner(BaseVideoCaptioner):
         with torch.inference_mode():
             output_ids = self.model.generate(
                 **inputs,
-                max_new_tokens=48,
+                max_new_tokens=128,
                 temperature=0.1,
                 top_k=50,
                 top_p=0.1,
