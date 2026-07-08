@@ -28,8 +28,8 @@ class MiniCPMVVideoCaptioner(BaseVideoCaptioner):
         image = Image.fromarray(frame_rgb)
 
         prompt = (
-            "Footage clips from CCTV will be shared. Camera is installed on the top, looking down. There's house door on the left side, which isn't visible due to camera angle. There are cars parked on the other end of the road. If there are any activity, describe that in details. Any animal entering or leaving the frame, mention that specifically, include the type of animal as well.\n" 
-            "Any human entering or leaving the frame, mention their color of clothes and what they're carrying or holding, or what they are doing. If no activity is observed, just say \"no activity\"." 
+            "This is a frame from a CCTV footage. Identify any animals or humans in the frame. If any human is present, describe their appearance and action. If there's no animal or human, say \"No Activity\"\n" 
+            # "Any human entering or leaving the frame, mention their color of clothes and what they're carrying or holding, or what they are doing. If no activity is observed, just say \"no activity\"." 
             # "Previous frame captions are shared below for temporal context.\n"
             # f"Previous caption: {previous_caption or 'none'}.\n"
             # "Be concise. Do not repeat the previous caption."
