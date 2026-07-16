@@ -10,10 +10,15 @@ from transformers import AutoProcessor, AutoModelForImageTextToText
 from .base import BaseVideoCaptioner, select_torch_dtype, ensure_torchvision
 
 
+_DEFAULT_SYSTEM_PROMPT = "You are a helpful multimodal assistant by Liquid AI. You are brief and concise."
+
+
 class LFM25VideoCaptioner(BaseVideoCaptioner):
     """Vision-Language captioner backed by Liquid AI's LFM2.5-VL."""
 
-    def __init__(self, model_id: str) -> None:
+    def __init__(self, model_id: str, system_prompt: str | None = None) -> None:
+        super().__init__(system_prompt=system_prompt)
+        self._default_system_prompt = _DEFAULT_SYSTEM_PROMPT
         ensure_torchvision()
         dtype = select_torch_dtype()
         self.model = AutoModelForImageTextToText.from_pretrained(
@@ -28,15 +33,17 @@ class LFM25VideoCaptioner(BaseVideoCaptioner):
         image = Image.fromarray(frame_rgb)
 
         prompt = (
-            "This is a frame from a CCTV footage. Identify any animals or humans in the frame. If any human is present, describe their appearance and action. If there's no animal or human, say \"No Activity\"\n" 
-            # "Describe the scene."
+            # "This is a frame from a CCTV footage. Identify any animals or humans in the frame. If any human is present, describe their appearance and action. If there's no animal or human, say \"No Activity\"\n" 
+            "Describe the scene."
             # f"Previous caption: {previous_caption or 'none'}.\n"
         )
+
+        system_content = self._custom_system_prompt or self._default_system_prompt
 
         conversation = [
             {
                 "role": "system",
-                "content": "You are a helpful multimodal assistant by Liquid AI. You are brief and concise.",
+                "content": system_content,
             },
             {
                 "role": "user",
