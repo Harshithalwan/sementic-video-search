@@ -12,6 +12,8 @@ import cv2
 
 from models import create_captioner
 from database import VectorStore
+from config import ActivityDetectionConfig, YOLOConfig
+from detectors import ActivityDetector, ObjectDetector
 
 
 class VideoProcessor:
@@ -34,6 +36,11 @@ class VideoProcessor:
         on_status: Callable[[str], None],
         on_error: Callable[[str], None],
         on_done: Callable[[], None],
+        activity_detection_enabled: bool = False,
+        activity_detection_threshold: float = 0.85,
+        yolo_enabled: bool = False,
+        yolo_model: str = "yolov8n.pt",
+        yolo_confidence: float = 0.5,
     ) -> None:
         self.video_path = video_path
         self.model_type = model_type
@@ -50,6 +57,11 @@ class VideoProcessor:
         self.on_status = on_status
         self.on_error = on_error
         self.on_done = on_done
+        self.activity_detection_enabled = activity_detection_enabled
+        self.activity_detection_threshold = activity_detection_threshold
+        self.yolo_enabled = yolo_enabled
+        self.yolo_model = yolo_model
+        self.yolo_confidence = yolo_confidence
 
         self.video_id = str(uuid.uuid4())
         self.video_name = Path(video_path).stem
@@ -91,6 +103,28 @@ class VideoProcessor:
         except Exception as e:
             self.on_status(f"Warning: Vector DB init failed: {e}")
 
+        # Initialise detectors
+        activity_detector = None
+        if self.activity_detection_enabled:
+            activity_detector = ActivityDetector(
+                ActivityDetectionConfig(
+                    enabled=True,
+                    threshold=self.activity_detection_threshold,
+                )
+            )
+            self.on_status(f"Activity detection enabled (threshold: {self.activity_detection_threshold})")
+
+        object_detector = None
+        if self.yolo_enabled:
+            object_detector = ObjectDetector(
+                YOLOConfig(
+                    enabled=True,
+                    model_path=self.yolo_model,
+                    confidence_threshold=self.yolo_confidence,
+                )
+            )
+            self.on_status(f"YOLO detection enabled (model: {self.yolo_model})")
+
         capture = cv2.VideoCapture(self.video_path)
         if not capture.isOpened():
             self.on_error("Could not open video file.")
@@ -118,6 +152,17 @@ class VideoProcessor:
                         time.sleep(min(0.02, next_caption_at - now))
                         continue
 
+                # Activity detection gate
+                if activity_detector and not activity_detector.is_active(frame):
+                    if not captioner.needs_all_frames:
+                        next_caption_at = time.monotonic() + self.caption_interval
+                    continue
+
+                # YOLO detection (runs on all active frames)
+                yolo_classes = []
+                if object_detector:
+                    yolo_classes, _ = object_detector.detect(frame)
+
                 caption = captioner.caption_frame(frame, previous_caption)
                 caption = caption.replace("\n", " ").strip()
 
@@ -138,6 +183,7 @@ class VideoProcessor:
                         "caption": caption,
                         "frame": self.caption_count,
                         "video_ts": video_timestamp_str,
+                        "yolo_objects": yolo_classes,
                     })
 
                     if store is not None:
@@ -155,6 +201,7 @@ class VideoProcessor:
                                     "frame_index": self.caption_count,
                                     "source": self.video_path,
                                     "caption": caption,
+                                    "yolo_objects": yolo_classes,
                                 },
                             )
                         except Exception:

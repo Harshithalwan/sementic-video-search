@@ -1,5 +1,5 @@
 export type WsMessage =
-  | { type: 'caption'; data: { time: string; caption: string; frame: number; video_ts: string } }
+  | { type: 'caption'; data: { time: string; caption: string; frame: number; video_ts: string; yolo_objects: string[] } }
   | { type: 'status'; message: string }
   | { type: 'error'; message: string }
   | { type: 'done' };

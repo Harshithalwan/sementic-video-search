@@ -1,12 +1,8 @@
 <script lang="ts">
   import '../app.css';
+  import { page } from '$app/stores';
 
   let { children } = $props();
-  let currentPath = $state('');
-
-  $effect(() => {
-    currentPath = window.location.pathname;
-  });
 </script>
 
 <nav class="topnav">
@@ -14,8 +10,8 @@
     <a href="/process">Semantic Video Search</a>
   </div>
   <div class="nav-links">
-    <a href="/process" class:active={currentPath.startsWith('/process')}>Video Processing</a>
-    <a href="/query" class:active={currentPath.startsWith('/query')}>Query Captions</a>
+    <a href="/process" class:active={$page.url.pathname.startsWith('/process')}>Video Processing</a>
+    <a href="/query" class:active={$page.url.pathname.startsWith('/query')}>Query Captions</a>
   </div>
 </nav>
 

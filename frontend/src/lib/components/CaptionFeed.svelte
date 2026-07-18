@@ -38,6 +38,12 @@
           {/if}
         </div>
         <div class="caption-text">{entry.caption}</div>
+        {#if entry.yolo_objects && entry.yolo_objects.length > 0}
+          <div class="yolo-objects">
+            <span class="yolo-label">Objects:</span>
+            {entry.yolo_objects.join(', ')}
+          </div>
+        {/if}
       </div>
     {/each}
 
@@ -99,6 +105,17 @@
   .caption-text {
     font-size: 0.95rem;
     line-height: 1.5;
+  }
+  .yolo-objects {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin-top: 0.25rem;
+    font-style: italic;
+  }
+  .yolo-label {
+    color: var(--accent);
+    font-weight: 500;
+    font-style: normal;
   }
   .empty-state {
     text-align: center;

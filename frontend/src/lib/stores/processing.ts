@@ -7,6 +7,7 @@ export interface Caption {
   caption: string;
   frame: number;
   video_ts: string;
+  yolo_objects: string[];
 }
 
 function createProcessingStore() {

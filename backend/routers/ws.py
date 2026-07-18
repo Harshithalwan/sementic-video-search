@@ -81,6 +81,11 @@ async def captions_ws(ws: WebSocket):
                     on_status=_on_status,
                     on_error=_on_error,
                     on_done=_on_done,
+                    activity_detection_enabled=config.get("activity_detection_enabled", False),
+                    activity_detection_threshold=config.get("activity_detection_threshold", 0.85),
+                    yolo_enabled=config.get("yolo_enabled", False),
+                    yolo_model=config.get("yolo_model", "yolov8n.pt"),
+                    yolo_confidence=config.get("yolo_confidence", 0.5),
                 )
 
                 set_active_processor(processor)

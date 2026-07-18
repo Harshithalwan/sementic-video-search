@@ -35,6 +35,11 @@
     <div class="caption-text">
       <strong>Caption:</strong> {result.document}
     </div>
+    {#if meta.yolo_objects && meta.yolo_objects.length > 0}
+      <div class="yolo-objects">
+        <strong>Detected Objects:</strong> {meta.yolo_objects.join(', ')}
+      </div>
+    {/if}
   </div>
 </details>
 
@@ -64,5 +69,10 @@
   .caption-text {
     font-size: 0.95rem;
     line-height: 1.6;
+  }
+  .yolo-objects {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    margin-top: 0.4rem;
   }
 </style>

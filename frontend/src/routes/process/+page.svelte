@@ -23,6 +23,13 @@
   let fps = $state(20);
   let clipDuration = $state(4.0);
 
+  // Detection settings
+  let activityDetectionEnabled = $state(false);
+  let activityThreshold = $state(0.85);
+  let yoloEnabled = $state(false);
+  let yoloModel = $state('yolov8n.pt');
+  let yoloConfidence = $state(0.5);
+
   let isProcessing = $state(false);
   let captions = $state<any[]>([]);
   let statusMessage = $state('');
@@ -66,7 +73,12 @@
       max_frames: maxFrames,
       collection_name: collectionName,
       fps,
-      clip_duration: clipDuration
+      clip_duration: clipDuration,
+      activity_detection_enabled: activityDetectionEnabled,
+      activity_detection_threshold: activityThreshold,
+      yolo_enabled: yoloEnabled,
+      yolo_model: yoloModel,
+      yolo_confidence: yoloConfidence
     });
   }
 
@@ -127,6 +139,68 @@
   bind:clipDuration
   disabled={isProcessing}
 />
+
+<div class="detection-section">
+  <h3>Detection Settings</h3>
+
+  <div class="detection-grid">
+    <div class="detection-card">
+      <label class="checkbox-label">
+        <input type="checkbox" bind:checked={activityDetectionEnabled} disabled={isProcessing} />
+        Activity Detection (SSIM)
+      </label>
+      {#if activityDetectionEnabled}
+        <div class="slider-row">
+          <label class="slider-label" for="activity-threshold">
+            Threshold: {activityThreshold.toFixed(2)}
+          </label>
+          <input
+            id="activity-threshold"
+            type="range"
+            min="0.5"
+            max="0.99"
+            step="0.01"
+            bind:value={activityThreshold}
+            disabled={isProcessing}
+          />
+        </div>
+      {/if}
+    </div>
+
+    <div class="detection-card">
+      <label class="checkbox-label">
+        <input type="checkbox" bind:checked={yoloEnabled} disabled={isProcessing} />
+        YOLO Object Detection
+      </label>
+      {#if yoloEnabled}
+        <div class="slider-row">
+          <label class="slider-label" for="yolo-model">
+            Model:
+          </label>
+          <select id="yolo-model" bind:value={yoloModel} disabled={isProcessing}>
+            <option value="yolov8n.pt">YOLOv8 Nano (fastest)</option>
+            <option value="yolov8s.pt">YOLOv8 Small</option>
+            <option value="yolov8m.pt">YOLOv8 Medium</option>
+          </select>
+        </div>
+        <div class="slider-row">
+          <label class="slider-label" for="yolo-confidence">
+            Confidence: {yoloConfidence.toFixed(2)}
+          </label>
+          <input
+            id="yolo-confidence"
+            type="range"
+            min="0.1"
+            max="0.9"
+            step="0.05"
+            bind:value={yoloConfidence}
+            disabled={isProcessing}
+          />
+        </div>
+      {/if}
+    </div>
+  </div>
+</div>
 
 <hr />
 
@@ -199,6 +273,49 @@
   }
   .checkbox-label input[type="checkbox"] {
     accent-color: var(--accent);
+  }
+  .detection-section {
+    margin-bottom: 1rem;
+  }
+  .detection-section h3 {
+    font-size: 0.95rem;
+    margin-bottom: 0.5rem;
+    color: var(--text-muted);
+  }
+  .detection-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+  }
+  .detection-card {
+    padding: 0.75rem;
+    background: var(--bg-surface);
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  .slider-row {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+  .slider-label {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+  }
+  .slider-row input[type="range"] {
+    width: 100%;
+    accent-color: var(--accent);
+  }
+  .slider-row select {
+    padding: 0.3rem 0.5rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg-elevated);
+    color: var(--text);
+    font-size: 0.85rem;
   }
   .button-row {
     display: grid;

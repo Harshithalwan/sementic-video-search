@@ -22,6 +22,11 @@ class ProcessStartRequest(BaseModel):
     collection_name: Optional[str] = None
     fps: int = 20
     clip_duration: float = 4.0
+    activity_detection_enabled: bool = False
+    activity_detection_threshold: float = 0.85
+    yolo_enabled: bool = False
+    yolo_model: str = "yolov8n.pt"
+    yolo_confidence: float = 0.5
 
 
 class ProcessStopRequest(BaseModel):
@@ -57,6 +62,11 @@ def start_processing(req: ProcessStartRequest):
         on_status=lambda _: None,
         on_error=lambda _: None,
         on_done=lambda _: None,
+        activity_detection_enabled=req.activity_detection_enabled,
+        activity_detection_threshold=req.activity_detection_threshold,
+        yolo_enabled=req.yolo_enabled,
+        yolo_model=req.yolo_model,
+        yolo_confidence=req.yolo_confidence,
     )
 
     set_active_processor(processor)
