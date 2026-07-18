@@ -142,6 +142,52 @@ python reset_db.py -y --collection-name captions_minicpm_v  # skip confirmation
 | `--full` | off | Delete ALL collections and database directory. |
 | `-y, --yes` | off | Skip confirmation prompt. |
 
+## Docker Deployment
+
+### Build
+
+```bash
+docker build -t dessertation .
+```
+
+### Run
+
+```bash
+docker run -p 8001:8001 -v hf_cache:/app/hf_cache dessertation
+```
+
+The app is available at **http://localhost:8001**.
+
+### How it works
+
+- The SvelteKit frontend is built and served as static files from FastAPI — no separate frontend server needed.
+- HuggingFace models are **not** baked into the image. On the first request that triggers a model, it will be downloaded automatically from HuggingFace Hub. Subsequent runs use the cached download.
+- The `-v hf_cache:/app/hf_cache` flag persists the model cache across container restarts so you only download once. Omit it if you don't mind re-downloading each time.
+
+### Selecting a model
+
+Models are selected via the web UI or API. The default model is `lfm2.5` (`LiquidAI/LFM2.5-VL-450M`), which is the smallest and fastest. Other available models:
+
+| Model Type | Model ID | Size |
+|---|---|---|
+| `lfm2.5` | `LiquidAI/LFM2.5-VL-450M` | ~450M |
+| `lfm2.5_larger` | `LiquidAI/LFM2.5-VL-1.8B` | ~1.8B |
+| `minicpm-v` | `openbmb/MiniCPM-V-4.6` | ~4B |
+| `llava-video` | `llava-hf/LLaVA-NeXT-Video-7B-hf` | ~7B |
+
+### With a remote Qdrant server
+
+If you run Qdrant separately (e.g. via Docker), override the connection at runtime:
+
+```bash
+docker run -p 8001:8001 \
+  -v hf_cache:/app/hf_cache \
+  dessertation \
+  uvicorn backend.main:app --host 0.0.0.0 --port 8001
+```
+
+Then pass `--qdrant-url http://host.docker.internal:6333` via the API if needed.
+
 ## Project Structure
 
 ```
@@ -157,5 +203,7 @@ python reset_db.py -y --collection-name captions_minicpm_v  # skip confirmation
 ├── main.py             # CLI entry-point (stream + query)
 ├── config.py           # Pipeline configuration dataclasses
 ├── reset_db.py         # Database utility
+├── Dockerfile          # Multi-stage Docker build (frontend + backend)
+├── .dockerignore
 └── requirements.txt
 ```
