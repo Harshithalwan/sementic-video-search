@@ -16,6 +16,8 @@ from qdrant_client.models import FieldCondition, Filter, MatchValue, Range
 
 from models import create_captioner, DEFAULT_MODEL_IDS, MODEL_REGISTRY, COLLECTION_NAMES
 from database import VectorStore
+from config import pipeline_config
+from detectors import ActivityDetector, ObjectDetector
 
 
 # ── Configuration ────────────────────────────────────────────────────
@@ -46,6 +48,12 @@ class StreamConfig:
     filter_ts_to: Optional[float] = None
     filter_time_from: Optional[float] = None
     filter_time_to: Optional[float] = None
+    # detection options
+    enable_activity_detection: bool = False
+    activity_threshold: float = 0.85
+    enable_yolo: bool = False
+    yolo_model: str = "yolov8n.pt"
+    yolo_confidence: float = 0.5
 
 
 # ── CLI ──────────────────────────────────────────────────────────────
@@ -193,6 +201,36 @@ def parse_args() -> argparse.Namespace:
         help="Only return captions at or before this wall-clock time (seconds since midnight).",
     )
 
+    # Detection options ------------------------------------------------
+    parser.add_argument(
+        "--enable-activity-detection",
+        action="store_true",
+        help="Enable SSIM-based activity detection. Frames with no visual change are skipped.",
+    )
+    parser.add_argument(
+        "--activity-threshold",
+        type=float,
+        default=0.85,
+        help="SSIM threshold for activity detection (default 0.85). Lower = more sensitive.",
+    )
+    parser.add_argument(
+        "--enable-yolo",
+        action="store_true",
+        help="Enable YOLO object detection. Detected objects are saved alongside captions.",
+    )
+    parser.add_argument(
+        "--yolo-model",
+        type=str,
+        default="yolov8n.pt",
+        help="YOLO model path (default: yolov8n.pt).",
+    )
+    parser.add_argument(
+        "--yolo-confidence",
+        type=float,
+        default=0.5,
+        help="YOLO confidence threshold (default: 0.5).",
+    )
+
     return parser.parse_args()
 
 
@@ -235,6 +273,11 @@ def build_config(args: argparse.Namespace) -> StreamConfig:
         filter_ts_to=args.filter_ts_to,
         filter_time_from=args.filter_time_from,
         filter_time_to=args.filter_time_to,
+        enable_activity_detection=args.enable_activity_detection,
+        activity_threshold=args.activity_threshold,
+        enable_yolo=args.enable_yolo,
+        yolo_model=args.yolo_model,
+        yolo_confidence=args.yolo_confidence,
     )
 
 
@@ -268,6 +311,22 @@ def run_stream(config: StreamConfig) -> None:
     previous_caption = ""
     caption_count = 0
     next_caption_at = 0.0
+
+    # Initialise detectors
+    activity_detector = None
+    if config.enable_activity_detection:
+        pipeline_config.activity_detection.enabled = True
+        pipeline_config.activity_detection.threshold = config.activity_threshold
+        activity_detector = ActivityDetector(pipeline_config.activity_detection)
+        print(f"Activity detection enabled (SSIM threshold: {config.activity_threshold})")
+
+    object_detector = None
+    if config.enable_yolo:
+        pipeline_config.yolo.enabled = True
+        pipeline_config.yolo.model_path = config.yolo_model
+        pipeline_config.yolo.confidence_threshold = config.yolo_confidence
+        object_detector = ObjectDetector(pipeline_config.yolo)
+        print(f"YOLO detection enabled (model: {config.yolo_model})")
 
     # Initialise vector store (if enabled)
     store: Optional[VectorStore] = None
@@ -309,6 +368,17 @@ def run_stream(config: StreamConfig) -> None:
                     time.sleep(min(0.02, next_caption_at - now))
                     continue
 
+            # Activity detection gate
+            if activity_detector and not activity_detector.is_active(frame):
+                if not captioner.needs_all_frames:
+                    next_caption_at = time.monotonic() + config.caption_interval
+                continue
+
+            # YOLO detection (runs on all active frames)
+            yolo_classes = []
+            if object_detector:
+                yolo_classes, yolo_ms = object_detector.detect(frame)
+
             caption = captioner.caption_frame(frame, previous_caption)
             caption = caption.replace("\n", " ").strip()
             if caption:
@@ -318,7 +388,8 @@ def run_stream(config: StreamConfig) -> None:
 
                 video_timestamp_ms = capture.get(cv2.CAP_PROP_POS_MSEC)
                 video_timestamp_str = f"{int(video_timestamp_ms // 60000):02d}:{int((video_timestamp_ms % 60000) // 1000):02d}:{int(video_timestamp_ms % 1000):03d}"
-                print(f"[{current_time_str}] {caption}", flush=True)
+                yolo_str = f" | Objects: {', '.join(yolo_classes)}" if yolo_classes else ""
+                print(f"[{current_time_str}] {caption}{yolo_str}", flush=True)
 
                 if store is not None:
                     try:
@@ -335,6 +406,7 @@ def run_stream(config: StreamConfig) -> None:
                                 "frame_index": caption_count,
                                 "source": str(config.source),
                                 "caption": caption,
+                                "yolo_objects": yolo_classes,
                             },
                         )
                     except Exception as e:
@@ -444,9 +516,9 @@ def run_query(config: StreamConfig) -> None:
         print("No matching captions found.")
         return
 
-    print("\n" + "=" * 160)
-    print(f"{'Score':<8} | {'Model':<12} | {'Video ID':<36} | {'Video Name':<20} | {'Vid TS':<14} | {'Time':<10} | {'Frame':<7} | {'Caption'}")
-    print("-" * 160)
+    print("\n" + "=" * 180)
+    print(f"{'Score':<8} | {'Model':<12} | {'Video ID':<36} | {'Video Name':<20} | {'Vid TS':<14} | {'Time':<10} | {'Frame':<7} | {'Objects':<20} | {'Caption'}")
+    print("-" * 180)
     for r in results:
         payload = r.metadata or {}
         model_type = payload.get("model_type", "N/A")
@@ -455,10 +527,12 @@ def run_query(config: StreamConfig) -> None:
         video_ts = payload.get("video_timestamp", "N/A")
         current_time = payload.get("current_time", "N/A")
         frame_idx = payload.get("frame_index", "N/A")
+        yolo_objects = payload.get("yolo_objects", [])
+        objects_str = ", ".join(yolo_objects) if yolo_objects else "-"
         caption = r.document or "No text"
         score = f"{r.score:.4f}"
-        print(f"{score:<8} | {model_type:<12} | {video_id:<36} | {video_name:<20} | {video_ts:<14} | {current_time:<10} | {frame_idx:<7} | {caption}")
-    print("=" * 160 + "\n")
+        print(f"{score:<8} | {model_type:<12} | {video_id:<36} | {video_name:<20} | {video_ts:<14} | {current_time:<10} | {frame_idx:<7} | {objects_str:<20} | {caption}")
+    print("=" * 180 + "\n")
 
 
 # ── Entry point ──────────────────────────────────────────────────────

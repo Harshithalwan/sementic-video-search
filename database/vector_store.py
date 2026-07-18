@@ -132,3 +132,22 @@ class VectorStore:
             )
             print(f"Available collections: {available}")
             sys.exit(1)
+
+    # ------------------------------------------------------------------
+    # Metadata helpers
+    # ------------------------------------------------------------------
+
+    def list_video_names(self) -> list[str]:
+        """Return all unique video names stored in the collection."""
+        if not self.collection_exists():
+            return []
+        try:
+            results = self._client.scroll(
+                collection_name=self.collection_name,
+                limit=10000,
+                with_payload=["video_name"],
+            )
+            names = sorted({r.payload.get("video_name", "") for r in results[0] if r.payload})
+            return [n for n in names if n]
+        except Exception:
+            return []

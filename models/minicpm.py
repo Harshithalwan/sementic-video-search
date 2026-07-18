@@ -10,10 +10,19 @@ from transformers import AutoProcessor, AutoModelForImageTextToText
 from .base import BaseVideoCaptioner, select_torch_dtype
 
 
+_DEFAULT_PROMPT = (
+    'This is a frame from a CCTV footage. Identify any animals or humans in the frame. '
+    'If any human is present, describe their appearance and action. '
+    'If there\'s no animal or human, say "No Activity"'
+)
+
+
 class MiniCPMVVideoCaptioner(BaseVideoCaptioner):
     """Vision-Language captioner backed by OpenBMB MiniCPM-V."""
 
-    def __init__(self, model_id: str) -> None:
+    def __init__(self, model_id: str, system_prompt: str | None = None) -> None:
+        super().__init__(system_prompt=system_prompt)
+        self._default_prompt = _DEFAULT_PROMPT
         dtype = select_torch_dtype()
         self.model = AutoModelForImageTextToText.from_pretrained(
             model_id,
@@ -27,13 +36,7 @@ class MiniCPMVVideoCaptioner(BaseVideoCaptioner):
         frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
         image = Image.fromarray(frame_rgb)
 
-        prompt = (
-            "This is a frame from a CCTV footage. Identify any animals or humans in the frame. If any human is present, describe their appearance and action. If there's no animal or human, say \"No Activity\"\n" 
-            # "Any human entering or leaving the frame, mention their color of clothes and what they're carrying or holding, or what they are doing. If no activity is observed, just say \"no activity\"." 
-            # "Previous frame captions are shared below for temporal context.\n"
-            # f"Previous caption: {previous_caption or 'none'}.\n"
-            # "Be concise. Do not repeat the previous caption."
-        )
+        prompt = self._custom_system_prompt or self._default_prompt
 
         conversation = [
             {

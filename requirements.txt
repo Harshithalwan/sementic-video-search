@@ -6,3 +6,6 @@ opencv-python==4.13.0.92
 torchvision==0.27.0
 qdrant-client==1.18.0
 fastembed==0.8.0
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+ultralytics>=8.0.0

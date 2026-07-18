@@ -12,6 +12,16 @@ from transformers import LlavaNextVideoForConditionalGeneration, LlavaNextVideoP
 from .base import BaseVideoCaptioner, select_torch_dtype
 
 
+_DEFAULT_PROMPT = (
+    "You are captioning a CCTV video. Camera is installed on the top, looking down. "
+    "There's house door on the left side, which isn't visible due to camera angle. "
+    "There are cars parked on the other end of the road."
+    "Describe if there's any change in the scene, any humans or animals present, "
+    "their actions and attire, what they are carrying or holding, etc."
+    "and prominent background features.\n"
+)
+
+
 class LLaVAVideoCaptioner(BaseVideoCaptioner):
     """Vision-Language captioner backed by ``llava-hf/LLaVA-NeXT-Video-7B-hf``.
 
@@ -36,7 +46,10 @@ class LLaVAVideoCaptioner(BaseVideoCaptioner):
         fps: int = 2,
         clip_duration: float = 4.0,
         max_new_tokens: int = 128,
+        system_prompt: str | None = None,
     ) -> None:
+        super().__init__(system_prompt=system_prompt)
+        self._default_prompt = _DEFAULT_PROMPT
         self.fps = fps
         self.clip_duration = clip_duration
         self.target_frames = max(1, int(round(fps * clip_duration)))
@@ -85,13 +98,8 @@ class LLaVAVideoCaptioner(BaseVideoCaptioner):
             cv2.cvtColor(f, cv2.COLOR_BGR2RGB) for f in self._buffer
         ])
 
-        prompt = (
-            "You are captioning a CCTV video. Camera is installed on the top, looking down. There's house door on the left side, which isn't visible due to camera angle. There are cars parked on the other end of the road."
-            "Describe if there's any change in the scene, any humans or animals present, their actions and attire, what they are carrying or holding, etc."
-            "and prominent background features.\n"
-            # f"Previous caption: {previous_caption or 'none'}.\n"
+        prompt = (self._custom_system_prompt or self._default_prompt) + (
             f"This clip contains {frame_count} frames sampled at {self.fps} fps.\n"
-            # "Be concise. Do not repeat the previous caption."
         )
 
         conversation = [

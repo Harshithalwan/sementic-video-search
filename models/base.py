@@ -32,6 +32,9 @@ def select_torch_dtype() -> torch.dtype:
 class BaseVideoCaptioner(abc.ABC):
     """Abstract base class that every VLM captioner must implement."""
 
+    def __init__(self, system_prompt: str | None = None) -> None:
+        self._custom_system_prompt = system_prompt
+
     @property
     def needs_all_frames(self) -> bool:
         """Whether the captioner requires every video frame (not just sampled ones).
