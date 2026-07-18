@@ -12,6 +12,8 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from fastapi.staticfiles import StaticFiles
+
 from backend.routers import models, query, processing, ws
 
 
@@ -43,3 +45,8 @@ app.include_router(ws.router)
 @app.get("/api/health")
 def health():
     return {"status": "ok"}
+
+
+_build_dir = Path(__file__).resolve().parent.parent / "frontend" / "build"
+if _build_dir.is_dir():
+    app.mount("/", StaticFiles(directory=str(_build_dir), html=True), name="static")
