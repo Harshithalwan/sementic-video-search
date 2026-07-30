@@ -16,8 +16,9 @@ _DEFAULT_SYSTEM_PROMPT = "You are a helpful multimodal assistant by Liquid AI. Y
 class LFM25VideoCaptioner(BaseVideoCaptioner):
     """Vision-Language captioner backed by Liquid AI's LFM2.5-VL."""
 
-    def __init__(self, model_id: str, system_prompt: str | None = None) -> None:
+    def __init__(self, model_id: str, system_prompt: str | None = None, max_new_tokens: int = 96) -> None:
         super().__init__(system_prompt=system_prompt)
+        self.max_new_tokens = max_new_tokens
         self._default_system_prompt = _DEFAULT_SYSTEM_PROMPT
         ensure_torchvision()
         dtype = select_torch_dtype()
@@ -33,7 +34,7 @@ class LFM25VideoCaptioner(BaseVideoCaptioner):
         image = Image.fromarray(frame_rgb)
 
         prompt = (
-            # "This is a frame from a CCTV footage. Identify any animals or humans in the frame. If any human is present, describe their appearance and action. If there's no animal or human, say \"No Activity\"\n" 
+            # "This is a frame from a CCTV footage. Identify any animals or humans in the frame. If any human is present, describe their appearance and action.\n" 
             "Describe the scene."
             # f"Previous caption: {previous_caption or 'none'}.\n"
         )
@@ -66,7 +67,7 @@ class LFM25VideoCaptioner(BaseVideoCaptioner):
         with torch.inference_mode():
             output_ids = self.model.generate(
                 **inputs,
-                max_new_tokens=96,
+                max_new_tokens=self.max_new_tokens,
                 temperature=0.1,
                 top_k=50,
                 top_p=0.1,

@@ -20,8 +20,9 @@ _DEFAULT_PROMPT = (
 class MiniCPMVVideoCaptioner(BaseVideoCaptioner):
     """Vision-Language captioner backed by OpenBMB MiniCPM-V."""
 
-    def __init__(self, model_id: str, system_prompt: str | None = None) -> None:
+    def __init__(self, model_id: str, system_prompt: str | None = None, max_new_tokens: int = 128) -> None:
         super().__init__(system_prompt=system_prompt)
+        self.max_new_tokens = max_new_tokens
         self._default_prompt = _DEFAULT_PROMPT
         dtype = select_torch_dtype()
         self.model = AutoModelForImageTextToText.from_pretrained(
@@ -64,7 +65,7 @@ class MiniCPMVVideoCaptioner(BaseVideoCaptioner):
         with torch.inference_mode():
             output_ids = self.model.generate(
                 **inputs,
-                max_new_tokens=128,
+                max_new_tokens=self.max_new_tokens,
                 temperature=0.1,
                 top_k=50,
                 top_p=0.1,

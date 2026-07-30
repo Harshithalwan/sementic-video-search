@@ -4,9 +4,10 @@
   interface Props {
     result: QueryResult;
     index: number;
+    onview: (source: string, timestampMs: number) => void;
   }
 
-  let { result, index }: Props = $props();
+  let { result, index, onview }: Props = $props();
   let open = $state(false);
 
   let meta = $derived(result.metadata);
@@ -38,6 +39,13 @@
     {#if meta.yolo_objects && meta.yolo_objects.length > 0}
       <div class="yolo-objects">
         <strong>Detected Objects:</strong> {meta.yolo_objects.join(', ')}
+      </div>
+    {/if}
+    {#if meta.source}
+      <div class="view-row">
+        <button class="btn-primary view-btn" onclick={() => onview(meta.source, meta.video_timestamp_ms)}>
+          View
+        </button>
       </div>
     {/if}
   </div>
@@ -74,5 +82,12 @@
     font-size: 0.85rem;
     color: var(--text-muted);
     margin-top: 0.4rem;
+  }
+  .view-row {
+    margin-top: 0.75rem;
+  }
+  .view-btn {
+    font-size: 0.85rem;
+    padding: 0.4rem 1rem;
   }
 </style>

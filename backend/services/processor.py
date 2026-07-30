@@ -42,7 +42,7 @@ class VideoProcessor:
         yolo_model: str = "yolov8n.pt",
         yolo_confidence: float = 0.5,
     ) -> None:
-        self.video_path = video_path
+        self.video_path = str(Path(video_path).resolve())
         self.model_type = model_type
         self.model_id = model_id
         self.system_prompt = system_prompt
@@ -88,6 +88,7 @@ class VideoProcessor:
                 fps=self.fps,
                 clip_duration=self.clip_duration,
                 system_prompt=self.system_prompt,
+                max_new_tokens=self.max_new_tokens,
             )
         except Exception as e:
             self.on_error(f"Failed to load model: {e}")

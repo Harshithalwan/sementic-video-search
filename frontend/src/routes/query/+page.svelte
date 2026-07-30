@@ -7,6 +7,7 @@
   import SearchForm from '$lib/components/SearchForm.svelte';
   import FilterPanel from '$lib/components/FilterPanel.svelte';
   import ResultCard from '$lib/components/ResultCard.svelte';
+  import VideoPlayer from '$lib/components/VideoPlayer.svelte';
 
   let models = $state<ModelInfo[]>([]);
   let collections = $state<Record<string, string>>({});
@@ -30,6 +31,17 @@
   let loading = $state(false);
   let error = $state('');
   let resultCount = $state(0);
+
+  // Video player modal
+  let playerShow = $state(false);
+  let playerSource = $state('');
+  let playerTimestampMs = $state(0);
+
+  function handleViewVideo(source: string, timestampMs: number) {
+    playerSource = source;
+    playerTimestampMs = timestampMs;
+    playerShow = true;
+  }
 
   const unsubResults = query.results.subscribe((v) => (results = v));
   const unsubLoading = query.loading.subscribe((v) => (loading = v));
@@ -157,12 +169,19 @@
   </div>
   <div class="results-list">
     {#each results as r, i}
-      <ResultCard result={r} index={i + 1} />
+      <ResultCard result={r} index={i + 1} onview={handleViewVideo} />
     {/each}
   </div>
 {:else if !loading && !error && results.length === 0 && searchQuery}
   <div class="empty-state text-muted">No matching captions found.</div>
 {/if}
+
+<VideoPlayer
+  videoSource={playerSource}
+  timestampMs={playerTimestampMs}
+  show={playerShow}
+  onclose={() => (playerShow = false)}
+/>
 
 <style>
   h1 {

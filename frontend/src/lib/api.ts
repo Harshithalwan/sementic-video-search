@@ -38,10 +38,24 @@ export interface VideosResponse {
   video_names: string[];
 }
 
+export interface CaptionMetadata {
+  video_id: string;
+  video_name: string;
+  model_type: string;
+  current_time: string;
+  current_time_secs: number;
+  video_timestamp: string;
+  video_timestamp_ms: number;
+  frame_index: number;
+  source: string;
+  caption: string;
+  yolo_objects: string[];
+}
+
 export interface QueryResult {
   score: number;
   document: string;
-  metadata: Record<string, any>;
+  metadata: CaptionMetadata;
 }
 
 export interface QueryResponse {

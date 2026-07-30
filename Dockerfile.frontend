@@ -1,0 +1,20 @@
+# ── Stage 1: Build SvelteKit frontend ─────────────────────────────
+FROM node:18-alpine AS frontend-build
+
+WORKDIR /app/frontend
+
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+
+COPY frontend/ ./
+
+RUN npm run build
+
+
+# ── Stage 2: Serve with nginx ─────────────────────────────────────
+FROM nginx:alpine
+
+COPY --from=frontend-build /app/frontend/build /usr/share/nginx/html
+COPY frontend/nginx.conf /etc/nginx/conf.d/default.conf
+
+EXPOSE 80

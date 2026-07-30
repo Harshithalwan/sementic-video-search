@@ -1,0 +1,31 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    ports:
+      - "8001:8001"
+    volumes:
+      - video_captions_db:/app/video_captions_db
+      - hf_cache:/app/hf_cache
+    networks:
+      - app-network
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+    networks:
+      - app-network
+
+volumes:
+  video_captions_db:
+  hf_cache:
+
+networks:
+  app-network:
+    driver: bridge

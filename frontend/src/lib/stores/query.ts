@@ -1,9 +1,10 @@
 import { writable } from 'svelte/store';
+import type { CaptionMetadata } from '$lib/api';
 
 export interface QueryResult {
   score: number;
   document: string;
-  metadata: Record<string, any>;
+  metadata: CaptionMetadata;
 }
 
 function createQueryStore() {

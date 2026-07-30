@@ -240,7 +240,7 @@ def resolve_source(source: str):
         return int(source)
     path = Path(source)
     if path.exists():
-        return str(path)
+        return str(path.resolve())
     return source
 
 
@@ -307,6 +307,7 @@ def run_stream(config: StreamConfig) -> None:
         config.model_id,
         fps=config.fps,
         clip_duration=config.clip_duration,
+        max_new_tokens=config.max_new_tokens,
     )
     previous_caption = ""
     caption_count = 0
@@ -404,7 +405,7 @@ def run_stream(config: StreamConfig) -> None:
                                 "video_timestamp": video_timestamp_str,
                                 "video_timestamp_ms": video_timestamp_ms,
                                 "frame_index": caption_count,
-                                "source": str(config.source),
+                                "source": str(Path(config.source).resolve()) if not str(config.source).isdigit() else str(config.source),
                                 "caption": caption,
                                 "yolo_objects": yolo_classes,
                             },

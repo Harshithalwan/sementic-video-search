@@ -87,8 +87,8 @@ def create_captioner(model_type: str, model_id: str, **kwargs) -> BaseVideoCapti
     if cls is LLaVAVideoCaptioner:
         return cls(model_id, **kwargs)
 
-    # Frame-by-frame models only accept system_prompt, not fps/clip_duration.
-    filtered = {k: v for k, v in kwargs.items() if k == "system_prompt"}
+    # Frame-by-frame models only accept system_prompt and max_new_tokens, not fps/clip_duration.
+    filtered = {k: v for k, v in kwargs.items() if k in ("system_prompt", "max_new_tokens")}
     return cls(model_id, **filtered)
 
 
