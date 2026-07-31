@@ -14,6 +14,10 @@ class YOLOConfig:
     enabled: bool = True
     model_path: str = "yolo26n.pt"
     confidence_threshold: float = 0.5
+    tracking_enabled: bool = True
+    tracker: str = "bytetrack.yaml"
+    direction_window_seconds: float = 1.0
+    stationary_threshold: float = 0.005
 
 
 @dataclass

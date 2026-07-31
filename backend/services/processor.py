@@ -37,11 +37,15 @@ class VideoProcessor:
         on_status: Callable[[str], None],
         on_error: Callable[[str], None],
         on_done: Callable[[], None],
+        on_frame: Optional[Callable[[bytes], None]] = None,
         activity_detection_enabled: bool = False,
         activity_detection_threshold: float = 0.85,
         yolo_enabled: bool = False,
         yolo_model: str = "yolov8n.pt",
         yolo_confidence: float = 0.5,
+        yolo_tracking: bool = True,
+        stream_width: int = 960,
+        jpeg_quality: int = 80,
         latency_logging_enabled: bool = False,
     ) -> None:
         self.video_path = str(Path(video_path).resolve())
@@ -59,11 +63,15 @@ class VideoProcessor:
         self.on_status = on_status
         self.on_error = on_error
         self.on_done = on_done
+        self.on_frame = on_frame or (lambda _: None)
         self.activity_detection_enabled = activity_detection_enabled
         self.activity_detection_threshold = activity_detection_threshold
         self.yolo_enabled = yolo_enabled
         self.yolo_model = yolo_model
         self.yolo_confidence = yolo_confidence
+        self.yolo_tracking = yolo_tracking
+        self.stream_width = stream_width
+        self.jpeg_quality = jpeg_quality
         self.latency_logging_enabled = latency_logging_enabled
 
         self.video_id = str(uuid.uuid4())
@@ -125,9 +133,11 @@ class VideoProcessor:
                     enabled=True,
                     model_path=self.yolo_model,
                     confidence_threshold=self.yolo_confidence,
+                    tracking_enabled=self.yolo_tracking,
                 )
             )
-            self.on_status(f"YOLO detection enabled (model: {self.yolo_model})")
+            tracking_note = " + tracking" if self.yolo_tracking else ""
+            self.on_status(f"YOLO detection enabled (model: {self.yolo_model}{tracking_note})")
 
         capture = cv2.VideoCapture(self.video_path)
         if not capture.isOpened():
@@ -156,12 +166,31 @@ class VideoProcessor:
 
                 now = time.monotonic()
 
+                # Stream every frame to the client, annotating with YOLO boxes
+                # (and tracking trails/arrows when tracking is enabled). The feed
+                # is paced by this loop: when caption generation takes longer,
+                # frames wait.
+                yolo_classes = []
+                yolo_tracks = []
+                frame_to_stream = frame
+                if object_detector:
+                    if self.yolo_tracking:
+                        frame_to_stream, yolo_tracks, yolo_ms = object_detector.track(frame)
+                        yolo_classes = [t["class"] for t in yolo_tracks]
+                    else:
+                        frame_to_stream, yolo_classes, yolo_ms = object_detector.annotate(frame)
+                    if logger:
+                        logger.log_yolo(yolo_ms, yolo_classes, self.caption_count)
+                self._send_frame(frame_to_stream)
+
+                # Caption gating: frame-by-frame models only caption every
+                # caption_interval seconds. The video feed itself is unaffected.
                 if not captioner.needs_all_frames:
                     if now < next_caption_at:
                         time.sleep(min(0.02, next_caption_at - now))
                         continue
 
-                # Activity detection gate
+                # Activity detection gate (gates captioning only)
                 if activity_detector:
                     ssim_active, ssim_score, ssim_ms = activity_detector.is_active(frame)
                     if logger:
@@ -170,13 +199,6 @@ class VideoProcessor:
                         if not captioner.needs_all_frames:
                             next_caption_at = time.monotonic() + self.caption_interval
                         continue
-
-                # YOLO detection (runs on all active frames)
-                yolo_classes = []
-                if object_detector:
-                    yolo_classes, yolo_ms = object_detector.detect(frame)
-                    if logger:
-                        logger.log_yolo(yolo_ms, yolo_classes, self.caption_count)
 
                 t_cap = time.perf_counter()
                 caption = captioner.caption_frame(frame, previous_caption)
@@ -197,18 +219,25 @@ class VideoProcessor:
                         f"{int(video_timestamp_ms % 1000):03d}"
                     )
 
+                    movement_summary = self._movement_summary(yolo_tracks)
+                    enriched_caption = caption
+                    if movement_summary:
+                        enriched_caption = f"{caption} | {movement_summary}"
+
                     self.on_caption({
                         "time": current_time_str,
                         "caption": caption,
                         "frame": self.caption_count,
                         "video_ts": video_timestamp_str,
                         "yolo_objects": yolo_classes,
+                        "yolo_tracks": yolo_tracks,
+                        "movement_summary": movement_summary,
                     })
 
                     if store is not None:
                         try:
                             store.save_caption(
-                                caption,
+                                enriched_caption,
                                 metadata={
                                     "video_id": self.video_id,
                                     "video_name": self.video_name,
@@ -220,7 +249,10 @@ class VideoProcessor:
                                     "frame_index": self.caption_count,
                                     "source": self.video_path,
                                     "caption": caption,
+                                    "enriched_caption": enriched_caption,
                                     "yolo_objects": yolo_classes,
+                                    "yolo_tracks": yolo_tracks,
+                                    "movement_summary": movement_summary,
                                 },
                             )
                         except Exception:
@@ -238,4 +270,40 @@ class VideoProcessor:
             capture.release()
             if logger:
                 logger.close()
+            if store is not None:
+                store.close()
             self.on_done()
+
+    @staticmethod
+    def _movement_summary(tracks: list[dict]) -> str:
+        """Build a compact human-readable summary of tracked-object movement."""
+        parts = []
+        for t in tracks:
+            tid = t.get("track_id")
+            if tid is None:
+                continue
+            name = t.get("class", "object")
+            direction = t.get("direction", "unknown")
+            speed_pct = t.get("speed", 0.0) * 100
+            parts.append(f"{name}#{tid} {direction} ({speed_pct:.1f}%/s)")
+        return "; ".join(parts)
+
+    def _send_frame(self, frame) -> None:
+        """Downscale and JPEG-encode a frame, then push it via the callback."""
+        try:
+            if frame.shape[1] > self.stream_width:
+                scale = self.stream_width / frame.shape[1]
+                frame = cv2.resize(
+                    frame,
+                    (self.stream_width, int(frame.shape[0] * scale)),
+                    interpolation=cv2.INTER_AREA,
+                )
+            ok, buf = cv2.imencode(
+                ".jpg",
+                frame,
+                [int(cv2.IMWRITE_JPEG_QUALITY), self.jpeg_quality],
+            )
+            if ok:
+                self.on_frame(buf.tobytes())
+        except Exception:
+            pass

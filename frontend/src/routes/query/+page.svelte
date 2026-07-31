@@ -7,7 +7,7 @@
   import SearchForm from '$lib/components/SearchForm.svelte';
   import FilterPanel from '$lib/components/FilterPanel.svelte';
   import ResultCard from '$lib/components/ResultCard.svelte';
-  import VideoPlayer from '$lib/components/VideoPlayer.svelte';
+  import FrameViewer from '$lib/components/FrameViewer.svelte';
 
   let models = $state<ModelInfo[]>([]);
   let collections = $state<Record<string, string>>({});
@@ -32,12 +32,12 @@
   let error = $state('');
   let resultCount = $state(0);
 
-  // Video player modal
+  // Frame viewer modal
   let playerShow = $state(false);
   let playerSource = $state('');
   let playerTimestampMs = $state(0);
 
-  function handleViewVideo(source: string, timestampMs: number) {
+  function handleViewFrame(source: string, timestampMs: number) {
     playerSource = source;
     playerTimestampMs = timestampMs;
     playerShow = true;
@@ -169,15 +169,15 @@
   </div>
   <div class="results-list">
     {#each results as r, i}
-      <ResultCard result={r} index={i + 1} onview={handleViewVideo} />
+      <ResultCard result={r} index={i + 1} onview={handleViewFrame} />
     {/each}
   </div>
 {:else if !loading && !error && results.length === 0 && searchQuery}
   <div class="empty-state text-muted">No matching captions found.</div>
 {/if}
 
-<VideoPlayer
-  videoSource={playerSource}
+<FrameViewer
+  source={playerSource}
   timestampMs={playerTimestampMs}
   show={playerShow}
   onclose={() => (playerShow = false)}

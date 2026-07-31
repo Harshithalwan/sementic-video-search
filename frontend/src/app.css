@@ -1,16 +1,19 @@
 :root {
-  --bg: #0f1117;
-  --bg-surface: #1a1d27;
-  --bg-elevated: #222633;
-  --border: #2e3345;
-  --text: #e1e4ed;
-  --text-muted: #8891a5;
+  --bg: #0e1016;
+  --bg-surface: #161a24;
+  --bg-elevated: #1f2431;
+  --border: #2a3040;
+  --text: #e4e7ef;
+  --text-muted: #8b94a8;
   --accent: #6c8cff;
   --accent-hover: #5a7aee;
+  --accent-soft: rgba(108, 140, 255, 0.14);
   --success: #4caf7c;
   --warning: #e6a84a;
   --error: #e05555;
   --radius: 8px;
+  --radius-lg: 14px;
+  --shadow: 0 10px 30px rgba(0, 0, 0, 0.28);
   --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --mono: 'JetBrains Mono', 'Fira Code', monospace;
 }
@@ -21,6 +24,10 @@
   box-sizing: border-box;
   margin: 0;
   padding: 0;
+}
+
+html {
+  color-scheme: dark;
 }
 
 body {
@@ -55,10 +62,10 @@ select {
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 0.5rem 0.75rem;
+  padding: 0.55rem 0.75rem;
   color: var(--text);
   outline: none;
-  transition: border-color 0.15s;
+  transition: border-color 0.15s, box-shadow 0.15s;
   width: 100%;
 }
 
@@ -67,6 +74,7 @@ input[type="number"]:focus,
 textarea:focus,
 select:focus {
   border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
 select {
@@ -79,12 +87,25 @@ button {
   border-radius: var(--radius);
   padding: 0.55rem 1.25rem;
   font-weight: 500;
-  transition: background 0.15s, opacity 0.15s;
+  transition: background 0.15s, opacity 0.15s, transform 0.1s;
+}
+
+button:active:not(:disabled) {
+  transform: translateY(1px);
 }
 
 button:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .btn-primary {
@@ -115,6 +136,11 @@ button:disabled {
   background: #c94444;
 }
 
+.btn-lg {
+  padding: 0.8rem 1.5rem;
+  font-size: 1rem;
+}
+
 .full-width {
   width: 100%;
 }
@@ -129,7 +155,8 @@ label {
 details {
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  background: var(--bg-surface);
+  background: var(--bg);
+  overflow: hidden;
 }
 
 details summary {
@@ -187,4 +214,23 @@ details .content {
   to {
     transform: rotate(360deg);
   }
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 999px;
+  border: 2px solid var(--bg);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #3a4258;
 }

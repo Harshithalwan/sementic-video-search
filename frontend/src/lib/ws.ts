@@ -5,15 +5,18 @@ export type WsMessage =
   | { type: 'done' };
 
 export type WsHandler = (msg: WsMessage) => void;
+export type WsFrameHandler = (jpeg: ArrayBuffer) => void;
 
 export class CaptionWebSocket {
   private ws: WebSocket | null = null;
   private handler: WsHandler;
+  private frameHandler: WsFrameHandler;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private shouldReconnect = true;
 
-  constructor(handler: WsHandler) {
+  constructor(handler: WsHandler, frameHandler: WsFrameHandler) {
     this.handler = handler;
+    this.frameHandler = frameHandler;
   }
 
   connect() {
@@ -29,11 +32,17 @@ export class CaptionWebSocket {
       return;
     }
 
+    this.ws.binaryType = 'arraybuffer';
+
     this.ws.onopen = () => {
       console.log('[ws] connected');
     };
 
     this.ws.onmessage = (event) => {
+      if (event.data instanceof ArrayBuffer) {
+        this.frameHandler(event.data);
+        return;
+      }
       try {
         const msg: WsMessage = JSON.parse(event.data);
         this.handler(msg);

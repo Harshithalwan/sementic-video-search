@@ -49,7 +49,9 @@ export interface CaptionMetadata {
   frame_index: number;
   source: string;
   caption: string;
+  enriched_caption?: string;
   yolo_objects: string[];
+  movement_summary?: string;
 }
 
 export interface QueryResult {
@@ -113,6 +115,12 @@ export function startProcessing(config: {
   collection_name?: string;
   fps: number;
   clip_duration: number;
+  activity_detection_enabled?: boolean;
+  activity_detection_threshold?: number;
+  yolo_enabled?: boolean;
+  yolo_model?: string;
+  yolo_confidence?: number;
+  yolo_tracking?: boolean;
 }): Promise<ProcessStartResponse> {
   return request('/api/process/start', {
     method: 'POST',

@@ -27,6 +27,8 @@ class ProcessStartRequest(BaseModel):
     yolo_enabled: bool = False
     yolo_model: str = "yolov8n.pt"
     yolo_confidence: float = 0.5
+    yolo_tracking: bool = True
+    stream_width: int = 960
 
 
 class ProcessStopRequest(BaseModel):
@@ -46,6 +48,9 @@ def start_processing(req: ProcessStartRequest):
 
     from backend.services.processor import VideoProcessor
 
+    def on_done() -> None:
+        set_active_processor(None)
+
     processor = VideoProcessor(
         video_path=req.video_path,
         model_type=req.model_type,
@@ -61,12 +66,15 @@ def start_processing(req: ProcessStartRequest):
         on_caption=lambda _: None,
         on_status=lambda _: None,
         on_error=lambda _: None,
-        on_done=lambda _: None,
+        on_done=on_done,
+        on_frame=lambda _: None,
         activity_detection_enabled=req.activity_detection_enabled,
         activity_detection_threshold=req.activity_detection_threshold,
         yolo_enabled=req.yolo_enabled,
         yolo_model=req.yolo_model,
         yolo_confidence=req.yolo_confidence,
+        yolo_tracking=req.yolo_tracking,
+        stream_width=req.stream_width,
     )
 
     set_active_processor(processor)

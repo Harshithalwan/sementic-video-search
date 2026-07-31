@@ -9,35 +9,68 @@
   let { captions, isProcessing }: Props = $props();
 
   let feedEl: HTMLDivElement | undefined = $state();
+  let autoScroll = $state(true);
 
   $effect(() => {
-    if (feedEl && captions.length) {
-      feedEl.scrollTop = 0;
+    if (feedEl && autoScroll && captions.length) {
+      feedEl.scrollTop = feedEl.scrollHeight;
     }
   });
+
+  function handleScroll() {
+    if (!feedEl) return;
+    const nearBottom = feedEl.scrollHeight - feedEl.scrollTop - feedEl.clientHeight < 60;
+    if (nearBottom) {
+      if (!autoScroll) autoScroll = true;
+    } else {
+      autoScroll = false;
+    }
+  }
+
+  function resume() {
+    autoScroll = true;
+    if (feedEl) {
+      feedEl.scrollTop = feedEl.scrollHeight;
+    }
+  }
 </script>
 
-<div class="caption-feed">
-  {#if isProcessing}
-    <div class="processing-indicator">
-      <span class="spinner"></span>
-      Processing in progress...
-    </div>
-  {/if}
+<div class="caption-panel">
+  <div class="feed-list" bind:this={feedEl} onscroll={handleScroll}>
+    {#if captions.length === 0}
+      <div class="empty-state text-muted">
+        {#if isProcessing}
+          Waiting for the first caption...
+        {:else}
+          No captions yet. Set a video path and click Start Processing.
+        {/if}
+      </div>
+    {/if}
 
-  <div class="feed-list" bind:this={feedEl}>
-    {#each [...captions].reverse() as entry}
+    {#each captions as entry}
       <div class="caption-entry">
         <div class="caption-header">
           <span class="timestamp">[{entry.time}]</span>
-          <span class="frame-info mono">
-            {entry.frame >= 0 ? `Frame ${entry.frame}` : 'System'}
-          </span>
+          <span class="frame-info mono">{entry.frame >= 0 ? `Frame ${entry.frame}` : 'System'}</span>
           {#if entry.video_ts}
             <span class="video-ts mono">| Video {entry.video_ts}</span>
           {/if}
         </div>
         <div class="caption-text">{entry.caption}</div>
+        {#if entry.yolo_tracks && entry.yolo_tracks.length > 0}
+          <div class="yolo-tracks">
+            {#each entry.yolo_tracks as t}
+              <span class="track-chip">
+                {t.class} → {t.direction}
+              </span>
+            {/each}
+          </div>
+        {:else if entry.movement_summary}
+          <div class="yolo-objects">
+            <span class="yolo-label">Movement:</span>
+            {entry.movement_summary}
+          </div>
+        {/if}
         {#if entry.yolo_objects && entry.yolo_objects.length > 0}
           <div class="yolo-objects">
             <span class="yolo-label">Objects:</span>
@@ -46,37 +79,31 @@
         {/if}
       </div>
     {/each}
-
-    {#if captions.length === 0 && !isProcessing}
-      <div class="empty-state text-muted">
-        No captions yet. Set a video path and click Start Processing.
-      </div>
-    {/if}
   </div>
+
+  {#if !autoScroll && captions.length > 0}
+    <button class="jump-btn" onclick={resume}>
+      <span class="jump-icon">⌄</span>
+      Jump to latest
+    </button>
+  {/if}
 </div>
 
 <style>
-  .caption-feed {
+  .caption-panel {
+    position: relative;
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
-  }
-  .processing-indicator {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.65rem 1rem;
-    background: var(--bg-elevated);
-    border-radius: var(--radius);
-    color: var(--accent);
-    font-size: 0.9rem;
   }
   .feed-list {
     display: flex;
     flex-direction: column;
     gap: 0.4rem;
-    max-height: 500px;
+    max-height: 300px;
+    min-height: 90px;
     overflow-y: auto;
+    padding: 0.25rem 0.5rem 0.5rem 0.25rem;
+    scrollbar-gutter: stable;
   }
   .caption-entry {
     padding: 0.6rem 0.85rem;
@@ -117,9 +144,47 @@
     font-weight: 500;
     font-style: normal;
   }
+  .yolo-tracks {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin-top: 0.35rem;
+  }
+  .track-chip {
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 0.15rem 0.6rem;
+    border-radius: 999px;
+    background: rgba(99, 179, 255, 0.12);
+    color: var(--accent);
+    border: 1px solid rgba(99, 179, 255, 0.35);
+    white-space: nowrap;
+  }
   .empty-state {
     text-align: center;
     padding: 2rem;
     font-style: italic;
+  }
+  .jump-btn {
+    position: absolute;
+    bottom: 1rem;
+    right: 1rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.45rem 0.9rem;
+    border-radius: 999px;
+    background: var(--accent);
+    color: #fff;
+    font-size: 0.82rem;
+    font-weight: 600;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  }
+  .jump-btn:hover {
+    background: var(--accent-hover);
+  }
+  .jump-icon {
+    font-size: 1rem;
+    line-height: 1;
   }
 </style>

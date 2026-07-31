@@ -44,6 +44,9 @@ async def captions_ws(ws: WebSocket):
                 async def send_caption(data: dict[str, Any]) -> None:
                     await ws.send_json({"type": "caption", "data": data})
 
+                async def send_frame(data: bytes) -> None:
+                    await ws.send_bytes(data)
+
                 async def send_status(message: str) -> None:
                     await ws.send_json({"type": "status", "message": message})
 
@@ -53,17 +56,12 @@ async def captions_ws(ws: WebSocket):
                 async def send_done() -> None:
                     await ws.send_json({"type": "done"})
 
-                def _on_caption(data: dict[str, Any]) -> None:
-                    asyncio.run_coroutine_threadsafe(send_caption(data), loop)
-
-                def _on_status(message: str) -> None:
-                    asyncio.run_coroutine_threadsafe(send_status(message), loop)
-
-                def _on_error(message: str) -> None:
-                    asyncio.run_coroutine_threadsafe(send_error(message), loop)
-
                 def _on_done() -> None:
-                    asyncio.run_coroutine_threadsafe(send_done(), loop)
+                    set_active_processor(None)
+                    try:
+                        asyncio.run_coroutine_threadsafe(send_done(), loop)
+                    except Exception:
+                        pass
 
                 processor = VideoProcessor(
                     video_path=config.get("video_path", ""),
@@ -81,11 +79,14 @@ async def captions_ws(ws: WebSocket):
                     on_status=_on_status,
                     on_error=_on_error,
                     on_done=_on_done,
+                    on_frame=_on_frame,
                     activity_detection_enabled=config.get("activity_detection_enabled", False),
                     activity_detection_threshold=config.get("activity_detection_threshold", 0.85),
                     yolo_enabled=config.get("yolo_enabled", False),
                     yolo_model=config.get("yolo_model", "yolov8n.pt"),
                     yolo_confidence=config.get("yolo_confidence", 0.5),
+                    yolo_tracking=config.get("yolo_tracking", True),
+                    stream_width=config.get("stream_width", 960),
                 )
 
                 set_active_processor(processor)
@@ -105,4 +106,3 @@ async def captions_ws(ws: WebSocket):
     except WebSocketDisconnect:
         if processor and processor.is_running:
             processor.stop()
-            set_active_processor(None)

@@ -2,11 +2,17 @@
 
 from __future__ import annotations
 
+import threading
 from typing import Any, Optional
 
 from qdrant_client.models import FieldCondition, Filter, MatchValue, Range
 
 from database import VectorStore
+
+# Qdrant local (embedded) mode allows only one open client per storage folder.
+# FastAPI runs sync endpoints on a thread pool, so serialize access to the
+# local database to avoid "already accessed by another instance" collisions.
+_db_lock = threading.Lock()
 
 
 def build_filter(
@@ -58,9 +64,6 @@ def search_captions(
     time_from: Optional[float] = None,
     time_to: Optional[float] = None,
 ) -> list[dict[str, Any]]:
-    store = VectorStore(collection_name=collection)
-    store.ensure_collection_exists()
-
     qfilter = build_filter(
         video_name=video_name,
         video_id=video_id,
@@ -70,7 +73,13 @@ def search_captions(
         time_to=time_to,
     )
 
-    results = store.query(query_text, top_k=top_k, query_filter=qfilter)
+    with _db_lock:
+        store = VectorStore(collection_name=collection)
+        try:
+            store.ensure_collection_exists()
+            results = store.query(query_text, top_k=top_k, query_filter=qfilter)
+        finally:
+            store.close()
 
     return [
         {
@@ -83,15 +92,20 @@ def search_captions(
 
 
 def list_collections() -> list[str]:
-    from qdrant_client import QdrantClient
-    from pathlib import Path
-
-    client = QdrantClient(path=str(Path("./video_captions_db").resolve()))
-    collections = client.get_collections()
-    return [c.name for c in collections.collections]
+    with _db_lock:
+        store = VectorStore(collection_name="")
+        try:
+            collections = store.list_collections()
+        finally:
+            store.close()
+    return collections
 
 
 def list_video_names(collection: str) -> list[str]:
-    store = VectorStore(collection_name=collection)
-    store.ensure_collection_exists()
-    return store.list_video_names()
+    with _db_lock:
+        store = VectorStore(collection_name=collection)
+        try:
+            store.ensure_collection_exists()
+            return store.list_video_names()
+        finally:
+            store.close()

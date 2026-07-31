@@ -1,16 +1,19 @@
 <script lang="ts">
-  import { tick } from 'svelte';
-
   interface Props {
-    videoSource: string;
+    source: string;
     timestampMs: number;
     show: boolean;
     onclose: () => void;
   }
 
-  let { videoSource, timestampMs, show, onclose }: Props = $props();
+  let { source, timestampMs, show, onclose }: Props = $props();
 
-  let videoEl = $state<HTMLVideoElement | null>(null);
+  let loading = $state(false);
+  let loadError = $state('');
+
+  let frameSrc = $derived(
+    `/api/frame?path=${encodeURIComponent(source)}&timestamp_ms=${encodeURIComponent(timestampMs)}`
+  );
 
   function handleKeydown(e: KeyboardEvent) {
     if (e.key === 'Escape' && show) {
@@ -21,15 +24,8 @@
   $effect(() => {
     if (show) {
       document.addEventListener('keydown', handleKeydown);
-      tick().then(() => {
-        if (videoEl) {
-          videoEl.src = `/api/video?path=${encodeURIComponent(videoSource)}`;
-          videoEl.load();
-          videoEl.onloadedmetadata = () => {
-            videoEl!.currentTime = timestampMs / 1000;
-          };
-        }
-      });
+      loading = true;
+      loadError = '';
     }
     return () => {
       document.removeEventListener('keydown', handleKeydown);
@@ -43,21 +39,29 @@
   <div class="backdrop" role="presentation" onclick={onclose}>
     <div class="modal" role="dialog" tabindex="-1" onclick={(e) => e.stopPropagation()}>
       <div class="modal-header">
-        <span class="modal-title">{videoSource.split(/[/\\]/).pop()}</span>
+        <span class="modal-title">{source.split(/[/\\]/).pop()}</span>
         <button class="close-btn" onclick={onclose}>&times;</button>
       </div>
-      <div class="player-wrap">
-        <video
-          bind:this={videoEl}
-          controls
-          autoplay
-          class="video-el"
-        >
-          <track kind="captions" />
-        </video>
+      <div class="frame-wrap">
+        {#if loading}
+          <div class="status-text text-muted">Loading frame…</div>
+        {:else if loadError}
+          <div class="status-text text-error">{loadError}</div>
+        {:else}
+          <img
+            class="frame-img"
+            src={frameSrc}
+            alt="Video frame at timestamp"
+            onload={() => (loading = false)}
+            onerror={() => {
+              loading = false;
+              loadError = 'Could not load frame for this result.';
+            }}
+          />
+        {/if}
       </div>
       <div class="modal-footer">
-        <span class="timestamp-label">Seeking to {Math.floor(timestampMs / 1000)}s ({(timestampMs / 1000).toFixed(1)}s)</span>
+        <span>Frame at {(timestampMs / 1000).toFixed(1)}s</span>
       </div>
     </div>
   </div>
@@ -112,16 +116,25 @@
     color: var(--text);
     background: var(--bg-elevated);
   }
-  .player-wrap {
+  .frame-wrap {
     background: #000;
     display: flex;
     align-items: center;
     justify-content: center;
     min-height: 300px;
+    overflow: hidden;
   }
-  .video-el {
+  .frame-img {
     width: 100%;
     max-height: 70vh;
+    object-fit: contain;
+  }
+  .status-text {
+    font-size: 0.95rem;
+    padding: 1.5rem;
+  }
+  .text-error {
+    color: var(--error);
   }
   .modal-footer {
     padding: 0.5rem 1rem;

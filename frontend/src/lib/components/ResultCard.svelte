@@ -34,8 +34,13 @@
     </div>
     <hr />
     <div class="caption-text">
-      <strong>Caption:</strong> {result.document}
+      <strong>Caption:</strong> {meta.caption || result.document}
     </div>
+    {#if meta.movement_summary}
+      <div class="movement-summary">
+        <strong>Movement:</strong> {meta.movement_summary}
+      </div>
+    {/if}
     {#if meta.yolo_objects && meta.yolo_objects.length > 0}
       <div class="yolo-objects">
         <strong>Detected Objects:</strong> {meta.yolo_objects.join(', ')}
@@ -81,6 +86,11 @@
   .yolo-objects {
     font-size: 0.85rem;
     color: var(--text-muted);
+    margin-top: 0.4rem;
+  }
+  .movement-summary {
+    font-size: 0.85rem;
+    color: var(--accent);
     margin-top: 0.4rem;
   }
   .view-row {

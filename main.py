@@ -55,6 +55,7 @@ class StreamConfig:
     enable_yolo: bool = False
     yolo_model: str = "yolov8n.pt"
     yolo_confidence: float = 0.5
+    yolo_tracking: bool = True
     enable_latency_logging: bool = False
 
 
@@ -232,6 +233,13 @@ def parse_args() -> argparse.Namespace:
         default=0.5,
         help="YOLO confidence threshold (default: 0.5).",
     )
+    parser.add_argument(
+        "--no-yolo-tracking",
+        action="store_false",
+        dest="yolo_tracking",
+        default=True,
+        help="Disable YOLO object tracking (trails/direction analysis). Enabled by default.",
+    )
 
     # Latency logging -----------------------------------------------
     parser.add_argument(
@@ -287,6 +295,7 @@ def build_config(args: argparse.Namespace) -> StreamConfig:
         enable_yolo=args.enable_yolo,
         yolo_model=args.yolo_model,
         yolo_confidence=args.yolo_confidence,
+        yolo_tracking=args.yolo_tracking,
         enable_latency_logging=args.enable_latency_logging,
     )
 
@@ -336,8 +345,10 @@ def run_stream(config: StreamConfig) -> None:
         pipeline_config.yolo.enabled = True
         pipeline_config.yolo.model_path = config.yolo_model
         pipeline_config.yolo.confidence_threshold = config.yolo_confidence
+        pipeline_config.yolo.tracking_enabled = config.yolo_tracking
         object_detector = ObjectDetector(pipeline_config.yolo)
-        print(f"YOLO detection enabled (model: {config.yolo_model})")
+        tracking_note = " + tracking" if config.yolo_tracking else ""
+        print(f"YOLO detection enabled (model: {config.yolo_model}{tracking_note})")
 
     # Initialise vector store (if enabled)
     store: Optional[VectorStore] = None
@@ -394,10 +405,15 @@ def run_stream(config: StreamConfig) -> None:
                         next_caption_at = time.monotonic() + config.caption_interval
                     continue
 
-            # YOLO detection (runs on all active frames)
+            # YOLO detection/tracking (runs on all active frames)
             yolo_classes = []
+            yolo_tracks = []
             if object_detector:
-                yolo_classes, yolo_ms = object_detector.detect(frame)
+                if config.yolo_tracking:
+                    _, yolo_tracks, yolo_ms = object_detector.track(frame)
+                    yolo_classes = [t["class"] for t in yolo_tracks]
+                else:
+                    yolo_classes, yolo_ms = object_detector.detect(frame)
                 if logger:
                     logger.log_yolo(yolo_ms, yolo_classes, caption_count)
 
@@ -406,8 +422,18 @@ def run_stream(config: StreamConfig) -> None:
             caption_ms = (time.perf_counter() - t_cap) * 1000
             caption = caption.replace("\n", " ").strip()
             if caption:
+                movement_parts = []
+                for t in yolo_tracks:
+                    if t.get("track_id") is None:
+                        continue
+                    name = t.get("class", "object")
+                    direction = t.get("direction", "unknown")
+                    speed_pct = t.get("speed", 0.0) * 100
+                    movement_parts.append(f"{name}#{t['track_id']} {direction} ({speed_pct:.1f}%/s)")
+                movement_summary = "; ".join(movement_parts)
+                enriched_caption = f"{caption} | {movement_summary}" if movement_summary else caption
                 if logger:
-                    logger.log_caption(caption_ms, caption, config.model_type, config.model_id, caption_count)
+                    logger.log_caption(caption_ms, enriched_caption, config.model_type, config.model_id, caption_count)
                 current_time_str = time.strftime("%H:%M:%S")
                 now_secs = time.time()
                 current_time_secs = now_secs - (now_secs // 86400 * 86400)
@@ -415,12 +441,13 @@ def run_stream(config: StreamConfig) -> None:
                 video_timestamp_ms = capture.get(cv2.CAP_PROP_POS_MSEC)
                 video_timestamp_str = f"{int(video_timestamp_ms // 60000):02d}:{int((video_timestamp_ms % 60000) // 1000):02d}:{int(video_timestamp_ms % 1000):03d}"
                 yolo_str = f" | Objects: {', '.join(yolo_classes)}" if yolo_classes else ""
-                print(f"[{current_time_str}] {caption}{yolo_str}", flush=True)
+                move_str = f" | Movement: {movement_summary}" if movement_summary else ""
+                print(f"[{current_time_str}] {caption}{yolo_str}{move_str}", flush=True)
 
                 if store is not None:
                     try:
                         store.save_caption(
-                            caption,
+                            enriched_caption,
                             metadata={
                                 "video_id": video_id,
                                 "video_name": video_name,
@@ -432,7 +459,10 @@ def run_stream(config: StreamConfig) -> None:
                                 "frame_index": caption_count,
                                 "source": str(Path(config.source).resolve()) if not str(config.source).isdigit() else str(config.source),
                                 "caption": caption,
+                                "enriched_caption": enriched_caption,
                                 "yolo_objects": yolo_classes,
+                                "yolo_tracks": yolo_tracks,
+                                "movement_summary": movement_summary,
                             },
                         )
                     except Exception as e:
@@ -453,6 +483,8 @@ def run_stream(config: StreamConfig) -> None:
             cv2.destroyAllWindows()
         if logger:
             logger.close()
+        if store is not None:
+            store.close()
 
 
 # ── Query mode ───────────────────────────────────────────────────────
@@ -519,48 +551,50 @@ def run_query(config: StreamConfig) -> None:
 
     store.ensure_collection_exists()
 
-    query_filter = _build_query_filter(config)
-    if query_filter:
-        parts = []
-        for c in query_filter.must:
-            if hasattr(c, "match"):
-                parts.append(f"{c.key}={c.match.value}")
-            elif hasattr(c, "range"):
-                r = c.range
-                lo = f">={r.gte}" if r.gte is not None else ""
-                hi = f"<={r.lte}" if r.lte is not None else ""
-                parts.append(f"{c.key} [{lo} {hi}]")
-        print(f"Filters: {', '.join(parts)}")
-
-    print(f"Searching for: '{config.query}' (top {config.top_k} matches)...")
-
     try:
+        query_filter = _build_query_filter(config)
+        if query_filter:
+            parts = []
+            for c in query_filter.must:
+                if hasattr(c, "match"):
+                    parts.append(f"{c.key}={c.match.value}")
+                elif hasattr(c, "range"):
+                    r = c.range
+                    lo = f">={r.gte}" if r.gte is not None else ""
+                    hi = f"<={r.lte}" if r.lte is not None else ""
+                    parts.append(f"{c.key} [{lo} {hi}]")
+            print(f"Filters: {', '.join(parts)}")
+
+        print(f"Searching for: '{config.query}' (top {config.top_k} matches)...")
+
         results = store.query(config.query, top_k=config.top_k, query_filter=query_filter)
+
+        if not results:
+            print("No matching captions found.")
+            return
+
+        print("\n" + "=" * 180)
+        print(f"{'Score':<8} | {'Model':<12} | {'Video ID':<36} | {'Video Name':<20} | {'Vid TS':<14} | {'Time':<10} | {'Frame':<7} | {'Objects':<20} | {'Caption'}")
+        print("-" * 180)
+        for r in results:
+            payload = r.metadata or {}
+            model_type = payload.get("model_type", "N/A")
+            video_id = payload.get("video_id", "N/A")
+            video_name = payload.get("video_name", "N/A")
+            video_ts = payload.get("video_timestamp", "N/A")
+            current_time = payload.get("current_time", "N/A")
+            frame_idx = payload.get("frame_index", "N/A")
+            yolo_objects = payload.get("yolo_objects", [])
+            objects_str = ", ".join(yolo_objects) if yolo_objects else "-"
+            caption = r.document or "No text"
+            score = f"{r.score:.4f}"
+            print(f"{score:<8} | {model_type:<12} | {video_id:<36} | {video_name:<20} | {video_ts:<14} | {current_time:<10} | {frame_idx:<7} | {objects_str:<20} | {caption}")
+        print("=" * 180 + "\n")
     except Exception as e:
         print(f"Error executing search query: {e}")
         sys.exit(1)
-
-    if not results:
-        print("No matching captions found.")
-        return
-
-    print("\n" + "=" * 180)
-    print(f"{'Score':<8} | {'Model':<12} | {'Video ID':<36} | {'Video Name':<20} | {'Vid TS':<14} | {'Time':<10} | {'Frame':<7} | {'Objects':<20} | {'Caption'}")
-    print("-" * 180)
-    for r in results:
-        payload = r.metadata or {}
-        model_type = payload.get("model_type", "N/A")
-        video_id = payload.get("video_id", "N/A")
-        video_name = payload.get("video_name", "N/A")
-        video_ts = payload.get("video_timestamp", "N/A")
-        current_time = payload.get("current_time", "N/A")
-        frame_idx = payload.get("frame_index", "N/A")
-        yolo_objects = payload.get("yolo_objects", [])
-        objects_str = ", ".join(yolo_objects) if yolo_objects else "-"
-        caption = r.document or "No text"
-        score = f"{r.score:.4f}"
-        print(f"{score:<8} | {model_type:<12} | {video_id:<36} | {video_name:<20} | {video_ts:<14} | {current_time:<10} | {frame_idx:<7} | {objects_str:<20} | {caption}")
-    print("=" * 180 + "\n")
+    finally:
+        store.close()
 
 
 # ── Entry point ──────────────────────────────────────────────────────

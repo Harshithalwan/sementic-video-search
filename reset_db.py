@@ -80,44 +80,47 @@ def main() -> None:
 
     available = store.list_collections()
 
-    if args.full:
-        if not available:
-            print("No collections found — nothing to reset.")
+    try:
+        if args.full:
+            if not available:
+                print("No collections found — nothing to reset.")
+                return
+            action = "DELETE ALL collections: " + ", ".join(available)
+        elif args.collection_name:
+            action = f"DELETE collection '{args.collection_name}'"
+        else:
+            # No collection specified, no --full — just list and exit.
+            if not available:
+                print("No collections found in the database.")
+            else:
+                print("Available collections:")
+                for name in available:
+                    note = ""
+                    for model_type, coll in COLLECTION_NAMES.items():
+                        if coll == name:
+                            note = f"  ({model_type})"
+                            break
+                    print(f"  {name}{note}")
             return
-        action = "DELETE ALL collections: " + ", ".join(available)
-    elif args.collection_name:
-        action = f"DELETE collection '{args.collection_name}'"
-    else:
-        # No collection specified, no --full — just list and exit.
-        if not available:
-            print("No collections found in the database.")
-        else:
-            print("Available collections:")
-            for name in available:
-                note = ""
-                for model_type, coll in COLLECTION_NAMES.items():
-                    if coll == name:
-                        note = f"  ({model_type})"
-                        break
-                print(f"  {name}{note}")
-        return
 
-    if not args.yes:
-        answer = input(f"This will {action}. Continue? [y/N] ").strip().lower()
-        if answer not in ("y", "yes"):
-            print("Aborted.")
-            sys.exit(0)
+        if not args.yes:
+            answer = input(f"This will {action}. Continue? [y/N] ").strip().lower()
+            if answer not in ("y", "yes"):
+                print("Aborted.")
+                sys.exit(0)
 
-    if args.full:
-        store.reset_database()
-        print("Database has been fully reset.")
-    else:
-        store.collection_name = args.collection_name
-        deleted = store.delete_collection()
-        if not deleted:
-            print(f"Collection '{args.collection_name}' does not exist — nothing to delete.")
+        if args.full:
+            store.reset_database()
+            print("Database has been fully reset.")
         else:
-            print("Done.")
+            store.collection_name = args.collection_name
+            deleted = store.delete_collection()
+            if not deleted:
+                print(f"Collection '{args.collection_name}' does not exist — nothing to delete.")
+            else:
+                print("Done.")
+    finally:
+        store.close()
 
 
 if __name__ == "__main__":

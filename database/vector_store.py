@@ -26,6 +26,7 @@ class VectorStore:
         qdrant_url: Optional[str] = None,
     ) -> None:
         self.collection_name = collection_name
+        self._closed = False
 
         if qdrant_url:
             print(f"Connecting to Qdrant server at {qdrant_url}...")
@@ -36,6 +37,33 @@ class VectorStore:
             self._client = QdrantClient(path=str(resolved))
 
         print(f"Using vector database collection: '{self.collection_name}'")
+
+    # ------------------------------------------------------------------
+    # Lifecycle
+    # ------------------------------------------------------------------
+
+    def close(self) -> None:
+        """Release the underlying Qdrant client and its storage lock.
+
+        Idempotent: safe to call multiple times or after the store is no
+        longer needed. In local (embedded) mode this releases the exclusive
+        file lock on the storage folder so other clients/processes can open it.
+        """
+        if not getattr(self, "_closed", False):
+            self._client.close()
+            self._closed = True
+
+    def __enter__(self) -> "VectorStore":
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        self.close()
+
+    def __del__(self) -> None:
+        try:
+            self.close()
+        except Exception:
+            pass
 
     # ------------------------------------------------------------------
     # Save

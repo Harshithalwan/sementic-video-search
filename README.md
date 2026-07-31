@@ -131,6 +131,7 @@ python main.py --mode stream --source video.mp4 --enable-yolo --enable-activity-
 | GET | `/api/collections` | List Qdrant collections. |
 | GET | `/api/collections/{name}/videos` | List video names in a collection. |
 | POST | `/api/query` | Semantic search (`query`, `top_k`, `collection`, `filters`). |
+| GET | `/api/frame` | Extract a single JPEG frame from a video (`path`, `timestamp_ms`). |
 | POST | `/api/process/start` | Start video processing. |
 | POST | `/api/process/stop` | Stop active processing. |
 | GET | `/api/process/status` | Get processing status. |
