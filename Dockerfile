@@ -41,4 +41,4 @@ ENV HF_HUB_DISABLE_TELEMETRY=1
 
 EXPOSE 8001
 
-CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8001"]
+CMD ["python", "-m", "backend.main", "--host", "0.0.0.0", "--port", "8001"]

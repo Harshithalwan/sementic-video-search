@@ -373,6 +373,9 @@ def run_stream(config: StreamConfig) -> None:
     logger = LatencyLogger(
         model_type=config.model_type,
         model_id=config.model_id,
+        max_new_tokens=config.max_new_tokens,
+        source=config.source,
+        caption_interval=config.caption_interval,
     ) if config.enable_latency_logging else None
 
     try:

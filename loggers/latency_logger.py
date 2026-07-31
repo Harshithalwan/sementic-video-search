@@ -84,8 +84,14 @@ class LatencyLogger:
         log_dir: str = "latency_logs",
         model_type: str = "",
         model_id: str = "",
+        max_new_tokens: int | None = None,
+        source: str | None = None,
+        caption_interval: float | None = None,
     ) -> None:
         self._session_id = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_%f")
+        self.max_new_tokens = max_new_tokens
+        self.source = source
+        self.caption_interval = caption_interval
         sys_info = collect_system_info()
         self._sys_info = sys_info
         self._system = _system_info_to_dict(sys_info)
@@ -97,6 +103,9 @@ class LatencyLogger:
         self._write("system_info", {
             "model_type": model_type,
             "model_id": model_id,
+            "max_new_tokens": max_new_tokens,
+            "source": source,
+            "caption_interval": caption_interval,
             **self._system,
         })
 
@@ -151,6 +160,7 @@ class LatencyLogger:
         self._write("caption", {
             "elapsed_ms": round(elapsed_ms, 3),
             "caption_length": len(caption),
+            "max_new_tokens": self.max_new_tokens,
             "model_type": model_type,
             "model_id": model_id,
             "frame_index": frame_index,

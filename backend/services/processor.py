@@ -106,6 +106,14 @@ class VideoProcessor:
             self.on_done()
             return
 
+        print(
+            f"[processor] model={self.model_id} ({self.model_type}) "
+            f"max_new_tokens={self.max_new_tokens} "
+            f"caption_interval={self.caption_interval}s "
+            f"latency_logging={'on' if self.latency_logging_enabled else 'off'}",
+            flush=True,
+        )
+
         store = None
         try:
             store = VectorStore(
@@ -154,6 +162,9 @@ class VideoProcessor:
         logger = LatencyLogger(
             model_type=self.model_type,
             model_id=self.model_id,
+            max_new_tokens=self.max_new_tokens,
+            source=self.video_path,
+            caption_interval=self.caption_interval,
         ) if self.latency_logging_enabled else None
 
         next_caption_at = 0.0

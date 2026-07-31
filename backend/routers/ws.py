@@ -9,6 +9,7 @@ from typing import Any
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from models import DEFAULT_MODEL_IDS, COLLECTION_NAMES
+from backend import settings
 from backend.deps import get_active_processor, set_active_processor
 from backend.services.processor import VideoProcessor
 
@@ -87,6 +88,7 @@ async def captions_ws(ws: WebSocket):
                     yolo_confidence=config.get("yolo_confidence", 0.5),
                     yolo_tracking=config.get("yolo_tracking", True),
                     stream_width=config.get("stream_width", 960),
+                    latency_logging_enabled=settings.LATENCY_LOGGING_ENABLED,
                 )
 
                 set_active_processor(processor)

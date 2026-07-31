@@ -22,6 +22,13 @@ cd frontend && npm install
 uvicorn backend.main:app --port 8001
 ```
 
+Or via the CLI entry point (same server, adds options):
+
+```bash
+python -m backend.main --host 0.0.0.0 --port 8001
+python -m backend.main --enable-latency-logging     # enable latency logging
+```
+
 ### Frontend (SvelteKit)
 
 ```bash
@@ -72,8 +79,8 @@ python main.py --mode query --query "dog" --filter-video-name video.mp4 --filter
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--source SOURCE` | `0` | Video source: webcam index, file path, RTSP URL. |
-| `--caption-interval SECONDS` | `2.0` | Seconds between model calls. |
-| `--max-new-tokens N` | `48` | Maximum tokens generated per caption. |
+| `--caption-interval SECONDS` | `1.0` | Seconds between model calls. |
+| `--max-new-tokens N` | `500` | Maximum tokens generated per caption. |
 | `--max-frames N` | *(unlimited)* | Stop after this many captions. |
 | `--show-preview` | off | Show a live OpenCV preview window (`q` to quit). |
 
@@ -93,12 +100,35 @@ python main.py --mode query --query "dog" --filter-video-name video.mp4 --filter
 |------|---------|-------------|
 | `--enable-latency-logging` | off | Log per-component latency (SSIM, YOLO, caption model) to `latency_logs/` as JSON Lines. |
 
-When enabled, a `latency_logs/{hostname}_{session}_{model_type}.jsonl` file is created with one JSON object per line. Each line includes `event` type (`system_info`, `ssim`, `yolo`, or `caption`), `elapsed_ms`, `hostname`, and component-specific metadata — making it easy to compare latency across machines.
+When enabled, a `latency_logs/{hostname}_{session}_{model_type}.jsonl` file is created with one JSON object per line. Each line includes `event` type (`system_info`, `ssim`, `yolo`, or `caption`), `elapsed_ms`, `hostname`, and component-specific metadata — making it easy to compare latency across machines. The `system_info` record also stores the run config (`max_new_tokens`, `source`, `caption_interval`), and each `caption` record includes the `max_new_tokens` used.
 
-**Usage:**
+The flag works for both the CLI and the backend server (processing started from the web UI):
+
+**CLI usage:**
 ```bash
 python main.py --mode stream --source video.mp4 --enable-yolo --enable-activity-detection --enable-latency-logging
 ```
+
+**Backend usage:**
+```bash
+python -m backend.main --enable-latency-logging
+```
+
+In Docker, pass the flag after the image name:
+
+```bash
+docker run -p 8001:8001 -v hf_cache:/app/hf_cache dessertation --enable-latency-logging
+```
+
+**Comparing max token values** — run the same video once per `--max-new-tokens` value (add `--max-frames N` to keep each run short and comparable):
+
+```bash
+python main.py --mode stream --source testData/video.mp4 --enable-activity-detection --enable-yolo --enable-latency-logging --max-new-tokens 8   --max-frames 20
+python main.py --mode stream --source testData/video.mp4 --enable-activity-detection --enable-yolo --enable-latency-logging --max-new-tokens 48  --max-frames 20
+python main.py --mode stream --source testData/video.mp4 --enable-activity-detection --enable-yolo --enable-latency-logging --max-new-tokens 500 --max-frames 20
+```
+
+Each run produces its own JSONL file, and the `max_new_tokens` value is recorded inside, so you can compare SSIM, YOLO, and caption latencies per token budget.
 
 ### Database Options
 

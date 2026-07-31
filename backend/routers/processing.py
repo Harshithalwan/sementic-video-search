@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from typing import Optional
 
 from models import DEFAULT_MODEL_IDS, COLLECTION_NAMES
+from backend import settings
 from backend.deps import get_active_processor, set_active_processor
 
 router = APIRouter(prefix="/api", tags=["processing"])
@@ -75,6 +76,7 @@ def start_processing(req: ProcessStartRequest):
         yolo_confidence=req.yolo_confidence,
         yolo_tracking=req.yolo_tracking,
         stream_width=req.stream_width,
+        latency_logging_enabled=settings.LATENCY_LOGGING_ENABLED,
     )
 
     set_active_processor(processor)
