@@ -87,6 +87,19 @@ python main.py --mode query --query "dog" --filter-video-name video.mp4 --filter
 | `--yolo-model PATH` | `yolo26n.pt` | YOLO model path. |
 | `--yolo-confidence` | `0.5` | YOLO confidence threshold. |
 
+### Latency Logging
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--enable-latency-logging` | off | Log per-component latency (SSIM, YOLO, caption model) to `latency_logs/` as JSON Lines. |
+
+When enabled, a `latency_logs/{hostname}_{session}_{model_type}.jsonl` file is created with one JSON object per line. Each line includes `event` type (`system_info`, `ssim`, `yolo`, or `caption`), `elapsed_ms`, `hostname`, and component-specific metadata — making it easy to compare latency across machines.
+
+**Usage:**
+```bash
+python main.py --mode stream --source video.mp4 --enable-yolo --enable-activity-detection --enable-latency-logging
+```
+
 ### Database Options
 
 | Flag | Default | Description |
@@ -194,6 +207,7 @@ Then pass `--qdrant-url http://host.docker.internal:6333` via the API if needed.
 ├── backend/            # FastAPI app (routers, services)
 ├── database/           # Qdrant vector store abstraction
 ├── detectors/          # SSIM activity detection, YOLO object detection
+├── loggers/            # Latency logging (JSONL per-component timing)
 ├── frontend/           # SvelteKit UI
 ├── models/             # Vision-Language Model implementations
 │   ├── base.py         # BaseVideoCaptioner ABC + shared helpers

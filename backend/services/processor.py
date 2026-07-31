@@ -14,6 +14,7 @@ from models import create_captioner
 from database import VectorStore
 from config import ActivityDetectionConfig, YOLOConfig
 from detectors import ActivityDetector, ObjectDetector
+from loggers.latency_logger import LatencyLogger
 
 
 class VideoProcessor:
@@ -41,6 +42,7 @@ class VideoProcessor:
         yolo_enabled: bool = False,
         yolo_model: str = "yolov8n.pt",
         yolo_confidence: float = 0.5,
+        latency_logging_enabled: bool = False,
     ) -> None:
         self.video_path = str(Path(video_path).resolve())
         self.model_type = model_type
@@ -62,6 +64,7 @@ class VideoProcessor:
         self.yolo_enabled = yolo_enabled
         self.yolo_model = yolo_model
         self.yolo_confidence = yolo_confidence
+        self.latency_logging_enabled = latency_logging_enabled
 
         self.video_id = str(uuid.uuid4())
         self.video_name = Path(video_path).stem
@@ -138,6 +141,11 @@ class VideoProcessor:
 
         self.on_status(f"Processing started — {total_frames} frames, {fps_video:.1f} fps")
 
+        logger = LatencyLogger(
+            model_type=self.model_type,
+            model_id=self.model_id,
+        ) if self.latency_logging_enabled else None
+
         next_caption_at = 0.0
 
         try:
@@ -154,20 +162,30 @@ class VideoProcessor:
                         continue
 
                 # Activity detection gate
-                if activity_detector and not activity_detector.is_active(frame):
-                    if not captioner.needs_all_frames:
-                        next_caption_at = time.monotonic() + self.caption_interval
-                    continue
+                if activity_detector:
+                    ssim_active, ssim_score, ssim_ms = activity_detector.is_active(frame)
+                    if logger:
+                        logger.log_ssim(ssim_ms, ssim_score, ssim_active, self.caption_count, self.model_type)
+                    if not ssim_active:
+                        if not captioner.needs_all_frames:
+                            next_caption_at = time.monotonic() + self.caption_interval
+                        continue
 
                 # YOLO detection (runs on all active frames)
                 yolo_classes = []
                 if object_detector:
-                    yolo_classes, _ = object_detector.detect(frame)
+                    yolo_classes, yolo_ms = object_detector.detect(frame)
+                    if logger:
+                        logger.log_yolo(yolo_ms, yolo_classes, self.caption_count)
 
+                t_cap = time.perf_counter()
                 caption = captioner.caption_frame(frame, previous_caption)
+                caption_ms = (time.perf_counter() - t_cap) * 1000
                 caption = caption.replace("\n", " ").strip()
 
                 if caption:
+                    if logger:
+                        logger.log_caption(caption_ms, caption, self.model_type, self.model_id, self.caption_count)
                     current_time_str = time.strftime("%H:%M:%S")
                     now_secs = time.time()
                     current_time_secs = now_secs - (now_secs // 86400 * 86400)
@@ -218,4 +236,6 @@ class VideoProcessor:
                     next_caption_at = time.monotonic() + self.caption_interval
         finally:
             capture.release()
+            if logger:
+                logger.close()
             self.on_done()

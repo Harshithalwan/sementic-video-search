@@ -18,6 +18,7 @@ from models import create_captioner, DEFAULT_MODEL_IDS, MODEL_REGISTRY, COLLECTI
 from database import VectorStore
 from config import pipeline_config
 from detectors import ActivityDetector, ObjectDetector
+from loggers.latency_logger import LatencyLogger
 
 
 # ── Configuration ────────────────────────────────────────────────────
@@ -54,6 +55,7 @@ class StreamConfig:
     enable_yolo: bool = False
     yolo_model: str = "yolov8n.pt"
     yolo_confidence: float = 0.5
+    enable_latency_logging: bool = False
 
 
 # ── CLI ──────────────────────────────────────────────────────────────
@@ -231,6 +233,13 @@ def parse_args() -> argparse.Namespace:
         help="YOLO confidence threshold (default: 0.5).",
     )
 
+    # Latency logging -----------------------------------------------
+    parser.add_argument(
+        "--enable-latency-logging",
+        action="store_true",
+        help="Enable per-component latency logging to latency_logs/ directory (JSONL format).",
+    )
+
     return parser.parse_args()
 
 
@@ -278,6 +287,7 @@ def build_config(args: argparse.Namespace) -> StreamConfig:
         enable_yolo=args.enable_yolo,
         yolo_model=args.yolo_model,
         yolo_confidence=args.yolo_confidence,
+        enable_latency_logging=args.enable_latency_logging,
     )
 
 
@@ -349,6 +359,11 @@ def run_stream(config: StreamConfig) -> None:
     print(f"Video ID: {video_id}")
     print("Press Ctrl+C to stop.\n")
 
+    logger = LatencyLogger(
+        model_type=config.model_type,
+        model_id=config.model_id,
+    ) if config.enable_latency_logging else None
+
     try:
         while True:
             ok, frame = capture.read()
@@ -370,19 +385,29 @@ def run_stream(config: StreamConfig) -> None:
                     continue
 
             # Activity detection gate
-            if activity_detector and not activity_detector.is_active(frame):
-                if not captioner.needs_all_frames:
-                    next_caption_at = time.monotonic() + config.caption_interval
-                continue
+            if activity_detector:
+                ssim_active, ssim_score, ssim_ms = activity_detector.is_active(frame)
+                if logger:
+                    logger.log_ssim(ssim_ms, ssim_score, ssim_active, caption_count, config.model_type)
+                if not ssim_active:
+                    if not captioner.needs_all_frames:
+                        next_caption_at = time.monotonic() + config.caption_interval
+                    continue
 
             # YOLO detection (runs on all active frames)
             yolo_classes = []
             if object_detector:
                 yolo_classes, yolo_ms = object_detector.detect(frame)
+                if logger:
+                    logger.log_yolo(yolo_ms, yolo_classes, caption_count)
 
+            t_cap = time.perf_counter()
             caption = captioner.caption_frame(frame, previous_caption)
+            caption_ms = (time.perf_counter() - t_cap) * 1000
             caption = caption.replace("\n", " ").strip()
             if caption:
+                if logger:
+                    logger.log_caption(caption_ms, caption, config.model_type, config.model_id, caption_count)
                 current_time_str = time.strftime("%H:%M:%S")
                 now_secs = time.time()
                 current_time_secs = now_secs - (now_secs // 86400 * 86400)
@@ -426,6 +451,8 @@ def run_stream(config: StreamConfig) -> None:
         capture.release()
         if config.show_preview:
             cv2.destroyAllWindows()
+        if logger:
+            logger.close()
 
 
 # ── Query mode ───────────────────────────────────────────────────────
