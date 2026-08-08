@@ -108,7 +108,15 @@ log "Installing project dependencies (torch/transformers may take a while)..."
 log "Dependencies installed."
 
 # ---------------------------------------------------------------------------
-# 5. Pick a video from testData
+# 5. MPS/Apple-Silicon runtime environment
+# ---------------------------------------------------------------------------
+# Let ops without an MPS kernel fall back to CPU instead of crashing, and
+# keep memory un-fragmented for the larger models.
+export PYTORCH_ENABLE_MPS_FALLBACK=1
+export PYTORCH_MPS_HIGH_WATERMARK_RATIO=0.0
+
+# ---------------------------------------------------------------------------
+# 6. Pick a video from testData
 # ---------------------------------------------------------------------------
 mkdir -p testData
 VIDEO="$(find testData -maxdepth 1 -type f -name '*.mp4' 2>/dev/null | head -n1 || true)"
@@ -127,7 +135,7 @@ fi
 log "Using video: $VIDEO"
 
 # ---------------------------------------------------------------------------
-# 6. Run the latency logging command in the background
+# 7. Run the latency logging command in the background
 # ---------------------------------------------------------------------------
 PRE_EXISTING="$(find latency_logs -maxdepth 1 -type f -name '*.jsonl' 2>/dev/null | sort || true)"
 RUN_LOG="$(mktemp "${TMPDIR:-/tmp}/latency_run.XXXXXX")"
@@ -142,7 +150,7 @@ log "Starting stream with latency logging (output: $RUN_LOG)"
 PID=$!
 
 # ---------------------------------------------------------------------------
-# 7. Wait for a new latency log file, then give it ~60s of events
+# 8. Wait for a new latency log file, then give it ~60s of events
 # ---------------------------------------------------------------------------
 NEW_FILE=""
 DEADLINE=$(( $(date +%s) + LOG_FILE_TIMEOUT_SECS ))
@@ -198,7 +206,7 @@ if kill -0 "$PID" 2>/dev/null; then
 fi
 
 # ---------------------------------------------------------------------------
-# 8. Git identity (repo-local), commit, push
+# 9. Git identity (repo-local), commit, push
 # ---------------------------------------------------------------------------
 log "Configuring repo-local git identity..."
 git config --local user.name "$GIT_NAME"

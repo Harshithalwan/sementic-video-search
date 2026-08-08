@@ -7,7 +7,12 @@ import torch
 from PIL import Image
 from transformers import AutoProcessor, AutoModelForImageTextToText
 
-from .base import BaseVideoCaptioner, select_torch_dtype, ensure_torchvision
+from .base import (
+    BaseVideoCaptioner,
+    select_torch_dtype,
+    select_torch_device,
+    ensure_torchvision,
+)
 
 
 _DEFAULT_SYSTEM_PROMPT = "You are a helpful multimodal assistant by Liquid AI. You are brief and concise."
@@ -22,11 +27,18 @@ class LFM25VideoCaptioner(BaseVideoCaptioner):
         self._default_system_prompt = _DEFAULT_SYSTEM_PROMPT
         ensure_torchvision()
         dtype = select_torch_dtype()
-        self.model = AutoModelForImageTextToText.from_pretrained(
-            model_id,
-            device_map="auto" if torch.cuda.is_available() else None,
-            torch_dtype=dtype,
-        )
+        device = select_torch_device()
+        if torch.cuda.is_available():
+            self.model = AutoModelForImageTextToText.from_pretrained(
+                model_id,
+                device_map="auto",
+                torch_dtype=dtype,
+            )
+        else:
+            self.model = AutoModelForImageTextToText.from_pretrained(
+                model_id,
+                torch_dtype=dtype,
+            ).to(device)
         self.processor = AutoProcessor.from_pretrained(model_id)
 
     def caption_frame(self, frame_bgr, previous_caption: str) -> str:

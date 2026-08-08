@@ -9,7 +9,7 @@ import numpy as np
 import torch
 from transformers import LlavaNextVideoForConditionalGeneration, LlavaNextVideoProcessor
 
-from .base import BaseVideoCaptioner, select_torch_dtype
+from .base import BaseVideoCaptioner, select_torch_dtype, select_torch_device
 
 
 _DEFAULT_PROMPT = (
@@ -59,11 +59,18 @@ class LLaVAVideoCaptioner(BaseVideoCaptioner):
         self._last_sample_time: float = 0.0
 
         dtype = select_torch_dtype()
-        self.model = LlavaNextVideoForConditionalGeneration.from_pretrained(
-            model_id,
-            device_map="auto" if torch.cuda.is_available() else None,
-            dtype=dtype,
-        )
+        device = select_torch_device()
+        if torch.cuda.is_available():
+            self.model = LlavaNextVideoForConditionalGeneration.from_pretrained(
+                model_id,
+                device_map="auto",
+                dtype=dtype,
+            )
+        else:
+            self.model = LlavaNextVideoForConditionalGeneration.from_pretrained(
+                model_id,
+                dtype=dtype,
+            ).to(device)
         self.processor = LlavaNextVideoProcessor.from_pretrained(model_id)
 
     @property

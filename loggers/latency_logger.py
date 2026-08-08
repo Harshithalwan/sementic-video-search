@@ -23,11 +23,15 @@ class SystemInfo:
     torch_version: str
     cuda_available: bool
     cuda_devices: list[str]
+    mps_available: bool
+    torch_device: str
     machine_id: str
 
 
 def collect_system_info() -> SystemInfo:
     hostname = socket.gethostname()
+    mps_available = False
+    torch_device = "cpu"
     try:
         import torch
         torch_version = torch.__version__
@@ -39,6 +43,11 @@ def collect_system_info() -> SystemInfo:
                     cuda_devices.append(torch.cuda.get_device_name(i))
                 except Exception:
                     cuda_devices.append(f"cuda:{i}")
+        mps_available = torch.backends.mps.is_available()
+        if cuda_available:
+            torch_device = "cuda"
+        elif mps_available:
+            torch_device = "mps"
     except Exception:
         torch_version = "unknown"
         cuda_available = False
@@ -59,6 +68,8 @@ def collect_system_info() -> SystemInfo:
         torch_version=torch_version,
         cuda_available=cuda_available,
         cuda_devices=cuda_devices,
+        mps_available=mps_available,
+        torch_device=torch_device,
         machine_id=hostname,
     )
 
@@ -74,6 +85,8 @@ def _system_info_to_dict(info: SystemInfo) -> dict[str, Any]:
         "torch_version": info.torch_version,
         "cuda_available": info.cuda_available,
         "cuda_devices": info.cuda_devices,
+        "mps_available": info.mps_available,
+        "torch_device": info.torch_device,
         "machine_id": info.machine_id,
     }
 

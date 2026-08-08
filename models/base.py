@@ -20,12 +20,23 @@ def ensure_torchvision() -> None:
         ) from exc
 
 
+def select_torch_device() -> str:
+    """Pick the best available device for the current hardware."""
+    if torch.cuda.is_available():
+        return "cuda"
+    if torch.backends.mps.is_available():
+        return "mps"
+    return "cpu"
+
+
 def select_torch_dtype() -> torch.dtype:
     """Pick the best available dtype for the current hardware."""
     if torch.cuda.is_available():
         return torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
     if torch.backends.mps.is_available():
-        return torch.float16
+        # bfloat16 is numerically safer than float16 on Apple Silicon
+        # (avoids overflow in attention/softmax).
+        return torch.bfloat16
     return torch.float32
 
 

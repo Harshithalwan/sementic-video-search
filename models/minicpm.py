@@ -7,7 +7,7 @@ import torch
 from PIL import Image
 from transformers import AutoProcessor, AutoModelForImageTextToText
 
-from .base import BaseVideoCaptioner, select_torch_dtype
+from .base import BaseVideoCaptioner, select_torch_dtype, select_torch_device
 
 
 _DEFAULT_PROMPT = (
@@ -25,12 +25,20 @@ class MiniCPMVVideoCaptioner(BaseVideoCaptioner):
         self.max_new_tokens = max_new_tokens
         self._default_prompt = _DEFAULT_PROMPT
         dtype = select_torch_dtype()
-        self.model = AutoModelForImageTextToText.from_pretrained(
-            model_id,
-            trust_remote_code=True,
-            device_map="auto" if torch.cuda.is_available() else None,
-            torch_dtype=dtype,
-        )
+        device = select_torch_device()
+        if torch.cuda.is_available():
+            self.model = AutoModelForImageTextToText.from_pretrained(
+                model_id,
+                trust_remote_code=True,
+                device_map="auto",
+                torch_dtype=dtype,
+            )
+        else:
+            self.model = AutoModelForImageTextToText.from_pretrained(
+                model_id,
+                trust_remote_code=True,
+                torch_dtype=dtype,
+            ).to(device)
         self.processor = AutoProcessor.from_pretrained(model_id, trust_remote_code=True)
 
     def caption_frame(self, frame_bgr, previous_caption: str) -> str:
